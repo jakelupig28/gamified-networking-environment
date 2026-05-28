@@ -1,0 +1,26 @@
+[
+  {
+    "id": 1,
+    "email": "admin@netmaster.edu",
+    "password": "admin",
+    "role": "Admin",
+    "name": "System Admin",
+    "isFirstLogin": false
+  },
+  {
+    "id": 2,
+    "email": "alex@netmaster.edu",
+    "password": "student",
+    "role": "Student",
+    "name": "Alex Chen",
+    "isFirstLogin": false
+  },
+  {
+    "id": 1779954541790,
+    "email": "almazan@gmail.com",
+    "password": "123456789",
+    "role": "Professor",
+    "name": "daryl almazan",
+    "isFirstLogin": true
+  }
+]

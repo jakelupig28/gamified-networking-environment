@@ -28,7 +28,11 @@ export default function Login() {
       const data = await res.json();
       
       if (data.success) {
-        if (data.user.isFirstLogin) {
+        if (data.user.isFirstLogin && data.user.role === "Professor") {
+          localStorage.setItem("pendingChangePasswordEmail", email);
+          localStorage.setItem("professorFirstLogin", "true");
+          router.push("/professor");
+        } else if (data.user.isFirstLogin) {
           localStorage.setItem("pendingChangePasswordEmail", email);
           router.push("/change-password");
         } else {
@@ -52,7 +56,7 @@ export default function Login() {
         Back to Home
       </Link>
       
-      <Navbar showLinks={false} />
+      <Navbar showLinks={false} showAuth={false} />
       <main className="flex-grow flex items-center justify-center p-8 w-full">
         <div className="w-full max-w-md">
           {/* Header */}
@@ -122,7 +126,7 @@ export default function Login() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
-                    placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
+                    placeholder="••••••••"
                     className="w-full bg-brand-bg border border-brand-border rounded p-3 pl-9 pr-10 text-sm text-brand-text focus:outline-none focus:border-brand-cyan transition-colors"
                   />
                   <button 
@@ -144,6 +148,12 @@ export default function Login() {
                 Initialize Session
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
               </button>
+
+              <div className="pt-4 text-center">
+                <p className="text-xs text-brand-muted">
+                  Are you a student and don't have an account? <Link href="/register" className="text-brand-cyan hover:text-brand-cyan-hover font-bold transition-colors">Register here</Link>
+                </p>
+              </div>
             </form>
 
             {/* Footer Text */}

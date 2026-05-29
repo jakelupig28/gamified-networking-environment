@@ -203,7 +203,7 @@ export default function AdminDashboard() {
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-brand-muted"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
                       </div>
-                      <input type={showPassword ? "text" : "password"} value={password} onChange={(e)=>setPassword(e.target.value)} required placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" className="w-full bg-brand-bg border border-brand-border rounded p-3 pl-9 pr-10 text-sm text-brand-text focus:outline-none focus:border-brand-cyan transition-colors" />
+                      <input type={showPassword ? "text" : "password"} value={password} onChange={(e)=>setPassword(e.target.value)} required placeholder="••••••••" className="w-full bg-brand-bg border border-brand-border rounded p-3 pl-9 pr-10 text-sm text-brand-text focus:outline-none focus:border-brand-cyan transition-colors" />
                       <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute inset-y-0 right-0 pr-3 flex items-center text-brand-muted hover:text-brand-cyan transition-colors">
                         {showPassword ? (
                           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
@@ -219,7 +219,7 @@ export default function AdminDashboard() {
                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-brand-muted"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
                       </div>
-                      <input type={showConfirmPassword ? "text" : "password"} value={confirmPassword} onChange={(e)=>setConfirmPassword(e.target.value)} required placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" className="w-full bg-brand-bg border border-brand-border rounded p-3 pl-9 pr-10 text-sm text-brand-text focus:outline-none focus:border-brand-cyan transition-colors" />
+                      <input type={showConfirmPassword ? "text" : "password"} value={confirmPassword} onChange={(e)=>setConfirmPassword(e.target.value)} required placeholder="••••••••" className="w-full bg-brand-bg border border-brand-border rounded p-3 pl-9 pr-10 text-sm text-brand-text focus:outline-none focus:border-brand-cyan transition-colors" />
                       <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute inset-y-0 right-0 pr-3 flex items-center text-brand-muted hover:text-brand-cyan transition-colors">
                         {showConfirmPassword ? (
                           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
@@ -260,16 +260,16 @@ export default function AdminDashboard() {
                </h3>
                <ul className="text-xs space-y-3">
                  <li className={`flex gap-2 items-start transition-colors ${minLength ? 'text-green-500' : 'text-red-400'}`}>
-                   <span className="mt-0.5">â—‡</span> Minimum 8 characters
+                   <span className="mt-0.5">•</span> Minimum 8 characters
                  </li>
                  <li className={`flex gap-2 items-start transition-colors ${hasUpper ? 'text-green-500' : 'text-red-400'}`}>
-                   <span className="mt-0.5">â—‡</span> At least one uppercase letter
+                   <span className="mt-0.5">•</span> At least one uppercase letter
                  </li>
                  <li className={`flex gap-2 items-start transition-colors ${hasDigit ? 'text-green-500' : 'text-red-400'}`}>
-                   <span className="mt-0.5">â—‡</span> At least one numeric digit
+                   <span className="mt-0.5">•</span> At least one numeric digit
                  </li>
                  <li className={`flex gap-2 items-start transition-colors ${hasSpecial ? 'text-green-500' : 'text-red-400'}`}>
-                   <span className="mt-0.5">â—‡</span> One special character (!@#$%^&*)
+                   <span className="mt-0.5">•</span> One special character (!@#$%^&*)
                  </li>
                </ul>
             </div>

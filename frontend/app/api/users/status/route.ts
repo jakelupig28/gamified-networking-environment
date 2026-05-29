@@ -1,0 +1,24 @@
+import { NextResponse } from 'next/server';
+import fs from 'fs';
+import path from 'path';
+
+export async function PUT(req: Request) {
+  try {
+    const { id, status, rejectMessage } = await req.json();
+    const filePath = path.join(process.cwd(), 'data', 'users.json');
+    const fileData = fs.readFileSync(filePath, 'utf8');
+    const users = JSON.parse(fileData);
+
+    const userIndex = users.findIndex((u: any) => u.id === id);
+
+    if (userIndex !== -1) {
+      users[userIndex] = { ...users[userIndex], status, rejectMessage };
+      fs.writeFileSync(filePath, JSON.stringify(users, null, 2));
+      return NextResponse.json({ success: true, message: 'Status updated' });
+    } else {
+      return NextResponse.json({ success: false, message: 'User not found' }, { status: 404 });
+    }
+  } catch (error) {
+    return NextResponse.json({ success: false, message: 'Server error' }, { status: 500 });
+  }
+}

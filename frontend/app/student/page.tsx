@@ -5,7 +5,7 @@ import Sidebar from "@/components/Sidebar";
 export default function StudentDashboard() {
   return (
     <div className="min-h-screen bg-brand-bg pl-64 flex flex-col">
-      <Sidebar activePath="/dashboard" />
+      <Sidebar activePath="/student/dashboard" />
       <main className="p-10 flex-grow w-full max-w-6xl">
         <div className="flex justify-between items-start mb-10">
           <div>

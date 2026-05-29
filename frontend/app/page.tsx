@@ -15,7 +15,7 @@ export default function Home() {
             {/* IP Tag */}
             <div className="inline-flex items-center gap-2 bg-brand-card px-3 py-1.5 rounded text-xs font-mono text-brand-cyan border border-brand-border">
               <span className="w-2 h-2 rounded-full bg-brand-cyan"></span>
-              <span className="opacity-90">192.168.1.104 â€” 10.4.30.211</span>
+              <span className="opacity-90">192.168.1.104 — 10.4.30.211</span>
             </div>
 
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight tracking-tight">

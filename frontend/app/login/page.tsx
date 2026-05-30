@@ -31,6 +31,7 @@ export default function Login() {
         // Store user details for display in Sidebar
         localStorage.setItem("userName", data.user.name || "");
         localStorage.setItem("userRole", data.user.role || "");
+        localStorage.setItem("userEmail", data.user.email || "");
 
         if (data.user.isFirstLogin && data.user.role === "Professor") {
           localStorage.setItem("pendingChangePasswordEmail", email);

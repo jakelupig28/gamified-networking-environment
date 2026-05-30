@@ -21,12 +21,50 @@ export default function StudentSettings() {
   const [profilePic, setProfilePic] = useState<string | null>(null);
 
   useEffect(() => {
-    const savedName = localStorage.getItem("userName");
-    if (savedName) {
-      const parts = savedName.split(" ");
-      const lastName = parts.length > 1 ? parts.pop() : "";
-      const firstName = parts.join(" ");
-      setFormData((prev) => ({ ...prev, firstName: firstName || "", lastName: lastName || "" }));
+    const email = localStorage.getItem("userEmail");
+    const loadProfile = async () => {
+      if (!email) return;
+      try {
+        const res = await fetch("/api/users");
+        const data = await res.json();
+        if (data.success && data.users) {
+          const currentUser = data.users.find((u: any) => u.email.toLowerCase() === email.toLowerCase());
+          if (currentUser) {
+            const parts = (currentUser.name || "").split(" ");
+            const lastName = parts.length > 1 ? parts.pop() : "";
+            const firstName = parts.join(" ");
+
+            setFormData({
+              firstName: currentUser.firstName || firstName || "",
+              middleName: currentUser.middleName || "",
+              lastName: currentUser.lastName || lastName || "",
+              birthdate: currentUser.birthdate || "",
+              age: currentUser.age || "",
+              gender: currentUser.gender || "",
+              address: currentUser.address || "",
+              studentId: currentUser.studentId || "",
+              email: currentUser.email || email || "",
+              course: currentUser.course || "",
+              yearLevel: currentUser.yearLevel || "",
+              section: currentUser.section || "",
+            });
+            if (currentUser.profilePic) {
+              setProfilePic(currentUser.profilePic);
+              localStorage.setItem("profilePic", currentUser.profilePic);
+              window.dispatchEvent(new Event("profilePicUpdated"));
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Error loading user profile:", err);
+      }
+    };
+
+    loadProfile();
+
+    const savedPic = localStorage.getItem("profilePic");
+    if (savedPic) {
+      setProfilePic(savedPic);
     }
   }, []);
 
@@ -37,19 +75,66 @@ export default function StudentSettings() {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const imageUrl = URL.createObjectURL(file);
-      setProfilePic(imageUrl);
-      const sidebarImg = document.getElementById("sidebar-profile-pic") as HTMLImageElement;
-      if (sidebarImg) sidebarImg.src = imageUrl;
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = reader.result as string;
+        localStorage.setItem("profilePic", base64String);
+        setProfilePic(base64String);
+        
+        // Dispatch event so that Sidebar updates instantly
+        window.dispatchEvent(new Event("profilePicUpdated"));
+      };
+      reader.readAsDataURL(file);
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // persist to server or localStorage as needed
+    const email = localStorage.getItem("userEmail") || formData.email;
+    if (!email) {
+      alert("Logged-in user email not found. Please log in again.");
+      return;
+    }
+
     const newFullName = `${formData.firstName} ${formData.middleName ? formData.middleName + ' ' : ''}${formData.lastName}`.trim();
-    if (newFullName) localStorage.setItem("userName", newFullName);
-    alert("Student profile updated")
+    
+    const payload = {
+      email,
+      firstName: formData.firstName,
+      middleName: formData.middleName,
+      lastName: formData.lastName,
+      birthdate: formData.birthdate,
+      age: formData.age,
+      gender: formData.gender,
+      address: formData.address,
+      studentId: formData.studentId,
+      course: formData.course,
+      yearLevel: formData.yearLevel,
+      section: formData.section,
+      profilePic: profilePic || undefined
+    };
+
+    try {
+      const res = await fetch("/api/users", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.success) {
+        localStorage.setItem("userName", newFullName);
+        if (profilePic) {
+          localStorage.setItem("profilePic", profilePic);
+        }
+        alert("Profile updated successfully!");
+        window.location.reload();
+      } else {
+        alert(data.message || "Failed to update profile");
+      }
+    } catch (err) {
+      console.error("Error saving profile:", err);
+      alert("Error connecting to server. Profile not saved.");
+    }
   };
 
   return (

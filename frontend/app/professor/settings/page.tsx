@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Sidebar from "@/components/Sidebar";
 
 export default function ProfessorSettings() {
@@ -20,17 +20,59 @@ export default function ProfessorSettings() {
   const [profilePic, setProfilePic] = useState<string | null>(null);
 
   useEffect(() => {
-    // Try to load initial name from localStorage if available
-    const savedName = localStorage.getItem("userName");
-    if (savedName) {
-      const parts = savedName.split(" ");
-      const lastName = parts.length > 1 ? parts.pop() : "";
-      const firstName = parts.join(" ");
-      setFormData(prev => ({
-        ...prev,
-        firstName: firstName || "",
-        lastName: lastName || ""
-      }));
+    const email = localStorage.getItem("userEmail");
+    const loadProfile = async () => {
+      if (!email) return;
+      try {
+        const res = await fetch("/api/users");
+        const data = await res.json();
+        if (data.success && data.users) {
+          const currentUser = data.users.find((u: any) => u.email.toLowerCase() === email.toLowerCase());
+          if (currentUser) {
+            const parts = (currentUser.name || "").split(" ");
+            let titleVal = currentUser.title || "";
+            let firstNameVal = currentUser.firstName || "";
+            let lastNameVal = currentUser.lastName || "";
+            
+            if (!firstNameVal && parts.length > 0) {
+              if (["dr.", "prof.", "mr.", "ms.", "mrs."].includes(parts[0].toLowerCase())) {
+                titleVal = titleVal || parts[0];
+                parts.shift();
+              }
+              lastNameVal = parts.length > 1 ? parts.pop() : "";
+              firstNameVal = parts.join(" ");
+            }
+
+            setFormData({
+              firstName: firstNameVal,
+              lastName: lastNameVal,
+              title: titleVal,
+              email: currentUser.email || email || "",
+              institutionalEmail: currentUser.institutionalEmail || "",
+              department: currentUser.department || "",
+              age: currentUser.age || "",
+              gender: currentUser.gender || "Male",
+              address: currentUser.address || "",
+              birthdate: currentUser.birthdate || "",
+              subjectHandles: currentUser.subjectHandles || "",
+            });
+            if (currentUser.profilePic) {
+              setProfilePic(currentUser.profilePic);
+              localStorage.setItem("profilePic", currentUser.profilePic);
+              window.dispatchEvent(new Event("profilePicUpdated"));
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Error loading professor profile:", err);
+      }
+    };
+
+    loadProfile();
+
+    const savedPic = localStorage.getItem("profilePic");
+    if (savedPic) {
+      setProfilePic(savedPic);
     }
   }, []);
 
@@ -41,33 +83,68 @@ export default function ProfessorSettings() {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const imageUrl = URL.createObjectURL(file);
-      setProfilePic(imageUrl);
-      
-      // Attempt to immediately update the sidebar image if it exists in the DOM
-      const sidebarImg = document.getElementById('sidebar-profile-pic') as HTMLImageElement;
-      if (sidebarImg) {
-        sidebarImg.src = imageUrl;
-        sidebarImg.style.display = 'block';
-      }
-      const headerImg = document.getElementById('header-profile-pic') as HTMLImageElement;
-      if (headerImg) {
-        headerImg.src = imageUrl;
-        headerImg.style.display = 'block';
-      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = reader.result as string;
+        localStorage.setItem("profilePic", base64String);
+        setProfilePic(base64String);
+        
+        // Dispatch event so that Sidebar and Header update instantly
+        window.dispatchEvent(new Event("profilePicUpdated"));
+      };
+      reader.readAsDataURL(file);
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Update local storage name so it reflects across the app immediately
+    const email = localStorage.getItem("userEmail") || formData.email;
+    if (!email) {
+      alert("Logged-in user email not found. Please log in again.");
+      return;
+    }
+
     const newFullName = `${formData.title ? formData.title + ' ' : ''}${formData.firstName} ${formData.lastName}`.trim();
-    if (newFullName) {
-      localStorage.setItem("userName", newFullName);
-      // Reload page to reflect name change in sidebar
-      window.location.reload();
-    } else {
-      alert("Profile information updated successfully.");
+    
+    const payload = {
+      email,
+      newEmail: formData.email,
+      firstName: formData.firstName,
+      lastName: formData.lastName,
+      title: formData.title,
+      institutionalEmail: formData.institutionalEmail,
+      department: formData.department,
+      age: formData.age,
+      gender: formData.gender,
+      address: formData.address,
+      birthdate: formData.birthdate,
+      subjectHandles: formData.subjectHandles,
+      profilePic: profilePic || undefined
+    };
+
+    try {
+      const res = await fetch("/api/users", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.success) {
+        localStorage.setItem("userName", newFullName);
+        if (formData.email) {
+          localStorage.setItem("userEmail", formData.email);
+        }
+        if (profilePic) {
+          localStorage.setItem("profilePic", profilePic);
+        }
+        alert("Profile updated successfully!");
+        window.location.reload();
+      } else {
+        alert(data.message || "Failed to update profile");
+      }
+    } catch (err) {
+      console.error("Error saving profile:", err);
+      alert("Error connecting to server. Profile not saved.");
     }
   };
 

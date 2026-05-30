@@ -14,6 +14,7 @@ export default function ProfessorDashboard() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState("");
+  const [profilePic, setProfilePic] = useState<string | null>(null);
 
   useEffect(() => {
     const isFirst = localStorage.getItem("professorFirstLogin") === "true";
@@ -26,6 +27,16 @@ export default function ProfessorDashboard() {
     if (savedName) {
       setUserName(savedName);
     }
+
+    const savedPic = localStorage.getItem("profilePic");
+    if (savedPic) setProfilePic(savedPic);
+
+    const handlePicUpdate = () => {
+      const pic = localStorage.getItem("profilePic");
+      setProfilePic(pic);
+    };
+    window.addEventListener("profilePicUpdated", handlePicUpdate);
+    return () => window.removeEventListener("profilePicUpdated", handlePicUpdate);
   }, []);
 
   const handlePasswordChange = async (e: React.FormEvent) => {
@@ -138,17 +149,6 @@ export default function ProfessorDashboard() {
           <div>
             <h1 className="text-3xl font-bold mb-1 tracking-tight">Professor Overview</h1>
             <div className="text-sm font-medium text-brand-text">CS401 - Advanced Networking Systems</div>
-          </div>
-          <div className="flex items-center gap-4">
-            <button className="text-brand-muted hover:text-brand-text transition-colors">
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
-            </button>
-            <div className="flex items-center gap-3 bg-brand-card py-2 px-3 rounded-full border border-brand-border">
-              <div className="w-8 h-8 rounded-full bg-brand-border overflow-hidden">
-                <img id="header-profile-pic" src="/placeholder-avatar.jpg" alt="Profile" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement!.innerHTML = '<div class="w-full h-full bg-gradient-to-tr from-brand-muted to-brand-cyan/20"></div>'; }} />
-              </div>
-              <span className="text-xs font-semibold mr-1">{userName}</span>
-            </div>
           </div>
         </header>
 

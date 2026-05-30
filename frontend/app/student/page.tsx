@@ -1,8 +1,17 @@
 "use client";
-
+import { useState, useEffect } from "react";
 import Sidebar from "@/components/Sidebar";
 
 export default function StudentDashboard() {
+  const [userName, setUserName] = useState("Alex");
+
+  useEffect(() => {
+    const savedName = localStorage.getItem("userName");
+    if (savedName) {
+      setUserName(savedName.split(" ")[0]);
+    }
+  }, []);
+
   return (
     <div className="min-h-screen bg-brand-bg pl-64 flex flex-col">
       <Sidebar activePath="/student/dashboard" />
@@ -10,19 +19,10 @@ export default function StudentDashboard() {
         <div className="flex justify-between items-start mb-10">
           <div>
             <div className="text-[10px] font-bold uppercase tracking-widest text-brand-text mb-2">Student Portal</div>
-            <h1 className="text-3xl font-bold mb-3">Welcome back, Alex.</h1>
+            <h1 className="text-3xl font-bold mb-3">Welcome back, {userName}.</h1>
             <p className="text-brand-muted text-sm max-w-xl leading-relaxed">
               Your network topology skills are in the top 15% of your cohort. Keep pushing towards your CCNA certification.
             </p>
-          </div>
-          <div className="bg-brand-card border border-brand-border rounded-lg p-4 flex items-center gap-4">
-             <div className="w-10 h-10 rounded bg-green-500/20 flex items-center justify-center text-green-500">
-               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-             </div>
-             <div>
-               <div className="text-[10px] font-bold uppercase tracking-widest text-brand-muted">Current Tier</div>
-               <div className="font-bold">Level 4: Routing</div>
-             </div>
           </div>
         </div>
 

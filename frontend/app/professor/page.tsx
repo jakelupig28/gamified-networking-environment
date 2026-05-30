@@ -7,6 +7,7 @@ import Sidebar from "@/components/Sidebar";
 export default function ProfessorDashboard() {
   const router = useRouter();
   const [isFirstLogin, setIsFirstLogin] = useState(false);
+  const [userName, setUserName] = useState("Dr. A. Chen");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -20,6 +21,10 @@ export default function ProfessorDashboard() {
     if (isFirst && pendingEmail) {
       setIsFirstLogin(true);
       setEmail(pendingEmail);
+    }
+    const savedName = localStorage.getItem("userName");
+    if (savedName) {
+      setUserName(savedName);
     }
   }, []);
 
@@ -140,10 +145,9 @@ export default function ProfessorDashboard() {
             </button>
             <div className="flex items-center gap-3 bg-brand-card py-2 px-3 rounded-full border border-brand-border">
               <div className="w-8 h-8 rounded-full bg-brand-border overflow-hidden">
-                {/* avatar placeholder */}
-                <div className="w-full h-full bg-gradient-to-tr from-brand-muted to-brand-card"></div>
+                <img id="header-profile-pic" src="/placeholder-avatar.jpg" alt="Profile" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement!.innerHTML = '<div class="w-full h-full bg-gradient-to-tr from-brand-muted to-brand-cyan/20"></div>'; }} />
               </div>
-              <span className="text-xs font-semibold mr-1">Dr. A. Chen</span>
+              <span className="text-xs font-semibold mr-1">{userName}</span>
             </div>
           </div>
         </header>

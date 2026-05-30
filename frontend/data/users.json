@@ -36,7 +36,7 @@
     "status": "admitted",
     "id": 1780028510297,
     "email": "jakelupig28@gmail.com",
-    "password": "changeme123",
+    "password": "12345678",
     "role": "Student",
     "name": "Jake Lupig",
     "isFirstLogin": true,

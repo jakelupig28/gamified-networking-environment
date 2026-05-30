@@ -28,13 +28,14 @@ export default function Login() {
       const data = await res.json();
       
       if (data.success) {
+        // Store user details for display in Sidebar
+        localStorage.setItem("userName", data.user.name || "");
+        localStorage.setItem("userRole", data.user.role || "");
+
         if (data.user.isFirstLogin && data.user.role === "Professor") {
           localStorage.setItem("pendingChangePasswordEmail", email);
           localStorage.setItem("professorFirstLogin", "true");
           router.push("/professor");
-        } else if (data.user.isFirstLogin) {
-          localStorage.setItem("pendingChangePasswordEmail", email);
-          router.push("/change-password");
         } else {
           // Redirect to dashboard based on role
           if (data.user.role === "Admin") router.push("/admin");
@@ -56,12 +57,19 @@ export default function Login() {
         Back to Home
       </Link>
       
-      <Navbar showLinks={false} showAuth={false} />
-      <main className="flex-grow flex items-center justify-center p-8 w-full">
+      <main className="flex-grow flex flex-col items-center justify-center p-8 w-full">
+        {/* Centered Logo */}
+        <div className="mb-8 flex items-center justify-center">
+          <Link href="/" className="flex items-center gap-2 text-2xl font-bold tracking-tight">
+            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-brand-cyan"><path d="M12 2v20"/><path d="m2 12 h20"/><path d="m4.93 4.93 14.14 14.14"/><path d="m19.07 4.93-14.14 14.14"/></svg>
+            NetMaster
+          </Link>
+        </div>
+        
         <div className="w-full max-w-md">
           {/* Header */}
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold mb-2">NetMaster</h1>
+            <h1 className="text-3xl font-bold mb-2">Login</h1>
             <p className="text-brand-text text-sm">System Authentication Portal</p>
           </div>
 

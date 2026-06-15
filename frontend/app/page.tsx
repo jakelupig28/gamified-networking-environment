@@ -1,112 +1,128 @@
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import Link from "next/link";
+import InteractiveNetwork from "@/components/InteractiveNetwork";
 
 export default function Home() {
   return (
     <>
-      <Navbar />
-      <main className="flex-grow w-full max-w-7xl mx-auto px-8 py-16">
+      {/* Hero Section: Screen-fitting container with interactive background */}
+      <div className="relative min-h-screen lg:h-screen flex flex-col justify-between overflow-hidden bg-brand-bg border-b border-brand-border">
+        {/* Dynamic Interactive Network Background */}
+        <InteractiveNetwork />
         
-        {/* Hero Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center mb-32 relative">
-          
-          <div className="space-y-8 z-10">
-            {/* IP Tag */}
-            <div className="inline-flex items-center gap-2 bg-brand-card px-3 py-1.5 rounded text-xs font-mono text-brand-cyan border border-brand-border">
-              <span className="w-2 h-2 rounded-full bg-brand-cyan"></span>
-              <span className="opacity-90">192.168.1.104 — 10.4.30.211</span>
-            </div>
-
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight tracking-tight">
-              Master Networking<br />
-              Through <span className="text-brand-cyan">Applied Action</span>
-            </h1>
-
-            <p className="text-brand-muted max-w-lg leading-relaxed text-sm">
-              A web-based, gamified command center for your IT career. Track competencies, analyze real-time performance, and dominate complex routing scenarios in simulated environments.
-            </p>
-
-            <div className="flex flex-wrap items-center gap-4 pt-2">
-              <Link href="/register" className="bg-brand-cyan hover:bg-brand-cyan-hover text-brand-bg font-semibold px-6 py-3 rounded flex items-center gap-2 transition-colors">
-                Start Learning
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-              </Link>
-              <Link href="#" className="bg-brand-card hover:bg-brand-border text-brand-text font-semibold px-6 py-3 rounded border border-brand-border flex items-center gap-2 transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                View Demo
-              </Link>
-            </div>
-
-            <div className="flex items-center gap-12 pt-8 border-t border-brand-border max-w-md">
-              <div>
-                <div className="text-2xl md:text-3xl font-bold mb-1">150+</div>
-                <div className="text-xs text-brand-muted font-medium">Active Labs</div>
+        {/* Transparent Navbar within the wrapper to overlay the canvas */}
+        <div className="relative z-20">
+          <Navbar />
+        </div>
+        
+        {/* Hero Content Area */}
+        <div className="flex-1 w-full max-w-7xl mx-auto px-8 flex items-center justify-center relative z-10 py-12 lg:py-0">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center w-full">
+            
+            <div className="space-y-8 z-10">
+              {/* IP Tag */}
+              <div className="inline-flex items-center gap-2 bg-brand-card px-3 py-1.5 rounded text-xs font-mono text-brand-cyan border border-brand-border">
+                <span className="w-2 h-2 rounded-full bg-brand-cyan"></span>
+                <span className="opacity-90">192.168.1.104 — 10.4.30.211</span>
               </div>
-              <div>
-                <div className="text-2xl md:text-3xl font-bold mb-1">12k</div>
-                <div className="text-xs text-brand-muted font-medium">Peers Online</div>
-              </div>
-              <div>
-                <div className="text-2xl md:text-3xl font-bold mb-1">98%</div>
-                <div className="text-xs text-brand-muted font-medium">Cert Rate</div>
-              </div>
-            </div>
-          </div>
-          
-          <div className="relative h-full min-h-[400px]">
-            {/* Abstract Graphic representation from screenshot */}
-            <div className="absolute top-[10%] right-[10%] bg-brand-card border border-brand-border p-5 rounded-lg w-64 shadow-2xl z-20 animate-float-1">
-               <div className="flex items-center justify-between mb-4">
-                  <div className="text-[10px] text-brand-cyan font-mono tracking-widest">OSPF Config</div>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-brand-cyan"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-               </div>
-               <div className="text-lg font-semibold mb-4">OSPF Routing</div>
-               <div className="w-full bg-brand-bg h-1.5 rounded-full overflow-hidden">
-                 <div className="w-[75%] h-full bg-brand-cyan"></div>
-               </div>
-               <div className="text-[10px] text-right text-brand-muted mt-2">75% Complete</div>
-            </div>
 
-            <div className="absolute top-[45%] right-[25%] bg-brand-card border border-brand-border p-5 rounded-lg w-56 shadow-2xl z-10 animate-float-2">
-               <div className="flex items-center gap-3 mb-4">
-                 <div className="w-8 h-8 rounded bg-brand-bg flex items-center justify-center border border-brand-border">
-                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-brand-text"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M8 12h8"/></svg>
+              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight tracking-tight">
+                Master Networking<br />
+                Through <span className="text-brand-cyan">Applied Action</span>
+              </h1>
+
+              <p className="text-brand-muted max-w-lg leading-relaxed text-sm">
+                A web-based, gamified command center for your IT career. Track competencies, analyze real-time performance, and dominate complex routing scenarios in simulated environments.
+              </p>
+
+              <div className="flex flex-wrap items-center gap-4 pt-2">
+                <Link href="/register" className="bg-brand-cyan hover:bg-brand-cyan-hover text-brand-bg font-semibold px-6 py-3 rounded flex items-center gap-2 transition-colors">
+                  Start Learning
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                </Link>
+                <Link href="#" className="bg-brand-card hover:bg-brand-border text-brand-text font-semibold px-6 py-3 rounded border border-brand-border flex items-center gap-2 transition-colors">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                  View Demo
+                </Link>
+              </div>
+
+              <div className="flex items-center gap-12 pt-8 border-t border-brand-border max-w-md">
+                <div>
+                  <div className="text-2xl md:text-3xl font-bold mb-1">150+</div>
+                  <div className="text-xs text-brand-muted font-medium">Active Labs</div>
+                </div>
+                <div>
+                  <div className="text-2xl md:text-3xl font-bold mb-1">12k</div>
+                  <div className="text-xs text-brand-muted font-medium">Peers Online</div>
+                </div>
+                <div>
+                  <div className="text-2xl md:text-3xl font-bold mb-1">98%</div>
+                  <div className="text-xs text-brand-muted font-medium">Cert Rate</div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="relative h-full min-h-[400px]">
+              {/* Abstract Graphic representation from screenshot */}
+              <div className="absolute top-[10%] right-[10%] bg-brand-card border border-brand-border p-5 rounded-lg w-64 shadow-2xl z-20 animate-float-1">
+                 <div className="flex items-center justify-between mb-4">
+                    <div className="text-[10px] text-brand-cyan font-mono tracking-widest">OSPF Config</div>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-brand-cyan"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
                  </div>
-                 <div className="text-xs font-semibold tracking-wider">Global Elite</div>
-               </div>
-               <div className="flex gap-2">
-                 <div className="w-8 h-6 bg-brand-border rounded"></div>
-                 <div className="w-8 h-6 bg-brand-cyan/30 rounded"></div>
-                 <div className="w-8 h-6 bg-brand-cyan/60 rounded"></div>
-                 <div className="w-8 h-6 bg-brand-cyan rounded"></div>
-               </div>
-            </div>
-
-            <div className="absolute bottom-[10%] right-[40%] bg-brand-card border border-brand-border px-4 py-3 flex items-center gap-3 rounded-lg shadow-2xl z-30 animate-float-3">
-              <div className="w-8 h-8 rounded bg-brand-cyan/20 flex items-center justify-center text-brand-cyan font-bold text-xs">AC</div>
-              <div>
-                <div className="text-xs font-bold leading-tight">Alex Chen</div>
-                <div className="text-[10px] text-brand-cyan">Collaborating...</div>
+                 <div className="text-lg font-semibold mb-4">OSPF Routing</div>
+                 <div className="w-full bg-brand-bg h-1.5 rounded-full overflow-hidden">
+                   <div className="w-[75%] h-full bg-brand-cyan"></div>
+                 </div>
+                 <div className="text-[10px] text-right text-brand-muted mt-2">75% Complete</div>
               </div>
-            </div>
 
-            <div className="absolute bottom-[20%] right-[5%] bg-brand-card border border-brand-border px-4 py-3 rounded-lg shadow-2xl z-20 animate-float-4">
-              <div className="flex items-center gap-3">
-                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                <div className="text-[10px] font-mono text-brand-text tracking-widest">System Load: 12ms</div>
+              <div className="absolute top-[45%] right-[25%] bg-brand-card border border-brand-border p-5 rounded-lg w-56 shadow-2xl z-10 animate-float-2">
+                 <div className="flex items-center gap-3 mb-4">
+                   <div className="w-8 h-8 rounded bg-brand-bg flex items-center justify-center border border-brand-border">
+                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-brand-text"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M8 12h8"/></svg>
+                   </div>
+                   <div className="text-xs font-semibold tracking-wider">Global Elite</div>
+                 </div>
+                 <div className="flex gap-2">
+                   <div className="w-8 h-6 bg-brand-border rounded"></div>
+                   <div className="w-8 h-6 bg-brand-cyan/30 rounded"></div>
+                   <div className="w-8 h-6 bg-brand-cyan/60 rounded"></div>
+                   <div className="w-8 h-6 bg-brand-cyan rounded"></div>
+                 </div>
               </div>
-            </div>
 
-            {/* Faint Connecting Lines (Circular Patterns) */}
-            <svg className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] text-brand-border/30 z-0 pointer-events-none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="200" cy="200" r="100" fill="none" stroke="currentColor" strokeWidth="1" strokeDasharray="4 4"/>
-              <circle cx="200" cy="200" r="150" fill="none" stroke="currentColor" strokeWidth="1" strokeDasharray="4 4"/>
-              <circle cx="200" cy="200" r="200" fill="none" stroke="currentColor" strokeWidth="1" strokeDasharray="4 4"/>
-            </svg>
+              <div className="absolute bottom-[10%] right-[40%] bg-brand-card border border-brand-border px-4 py-3 flex items-center gap-3 rounded-lg shadow-2xl z-30 animate-float-3">
+                <div className="w-8 h-8 rounded bg-brand-cyan/20 flex items-center justify-center text-brand-cyan font-bold text-xs">AC</div>
+                <div>
+                  <div className="text-xs font-bold leading-tight">Alex Chen</div>
+                  <div className="text-[10px] text-brand-cyan">Collaborating...</div>
+                </div>
+              </div>
+
+              <div className="absolute bottom-[20%] right-[5%] bg-brand-card border border-brand-border px-4 py-3 rounded-lg shadow-2xl z-20 animate-float-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                  <div className="text-[10px] font-mono text-brand-text tracking-widest">System Load: 12ms</div>
+                </div>
+              </div>
+
+              {/* Faint Connecting Lines (Circular Patterns) */}
+              <svg className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] text-brand-border/30 z-0 pointer-events-none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="200" cy="200" r="100" fill="none" stroke="currentColor" strokeWidth="1" strokeDasharray="4 4"/>
+                <circle cx="200" cy="200" r="150" fill="none" stroke="currentColor" strokeWidth="1" strokeDasharray="4 4"/>
+                <circle cx="200" cy="200" r="200" fill="none" stroke="currentColor" strokeWidth="1" strokeDasharray="4 4"/>
+              </svg>
+            </div>
           </div>
         </div>
+        
+        {/* Subtle padding bottom placeholder to push/center content nicely inside flexbox */}
+        <div className="h-4 lg:h-8"></div>
+      </div>
 
+      {/* Main Content Area: Placed below the Hero viewport wrapper */}
+      <main className="w-full max-w-7xl mx-auto px-8 py-16">
         {/* Command Center Section */}
         <div className="mb-24 pt-16">
           <div className="mb-12">
@@ -203,9 +219,8 @@ export default function Home() {
 
           </div>
         </div>
-
       </main>
       <Footer />
     </>
   );
-}
+}

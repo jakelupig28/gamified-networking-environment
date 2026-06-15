@@ -15,6 +15,25 @@ export default function ProfessorDashboard() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState("");
   const [profilePic, setProfilePic] = useState<string | null>(null);
+  const [pendingCount, setPendingCount] = useState(0);
+
+  useEffect(() => {
+    const fetchPendingCount = async () => {
+      try {
+        const res = await fetch("/api/users");
+        const data = await res.json();
+        if (data.success) {
+          const pending = data.users.filter(
+            (u: { role: string; status?: string }) => u.role === "Student" && (u.status === "pending" || !u.status)
+          );
+          setPendingCount(pending.length);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    fetchPendingCount();
+  }, []);
 
   useEffect(() => {
     const isFirst = localStorage.getItem("professorFirstLogin") === "true";
@@ -152,6 +171,21 @@ export default function ProfessorDashboard() {
           </div>
         </header>
 
+        {pendingCount > 0 && (
+          <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl flex justify-between items-center text-sm text-yellow-500 shadow-sm animate-fade-in">
+            <div className="flex items-center gap-2.5 font-semibold">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="animate-pulse"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <span>{pendingCount} student{pendingCount > 1 ? "s are" : " is"} awaiting enrollment validation.</span>
+            </div>
+            <button 
+              onClick={() => router.push("/professor/students")}
+              className="text-xs font-bold uppercase tracking-wider bg-yellow-500/20 hover:bg-yellow-500/35 px-4.5 py-2 rounded-md transition-colors text-yellow-500 cursor-pointer border-none"
+            >
+              Validate Now
+            </button>
+          </div>
+        )}
+
         <div className="grid grid-cols-3 gap-6 mb-6">
           {/* Active Students */}
           <div className="bg-brand-card border border-brand-border rounded-xl p-6 shadow-md">
@@ -274,29 +308,40 @@ export default function ProfessorDashboard() {
                </div>
              </div>
 
-             <div className="bg-brand-card border border-brand-border rounded-xl p-6 shadow-md flex-1">
-               <h2 className="text-sm font-bold mb-4">Requires Attention</h2>
-               <div className="space-y-4">
-                 <div className="flex gap-3 items-start">
-                   <div className="mt-1 text-red-500">
-                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                   </div>
-                   <div>
-                     <div className="text-xs font-semibold mb-0.5">3 students failing Lab 2</div>
-                     <div className="text-[10px] text-brand-muted">2 hours ago</div>
-                   </div>
-                 </div>
-                 <div className="flex gap-3 items-start">
-                   <div className="mt-1 text-brand-cyan">
-                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
-                   </div>
-                   <div>
-                     <div className="text-xs font-semibold mb-0.5">New discussion thread in Module 3</div>
-                     <div className="text-[10px] text-brand-muted">5 hours ago</div>
-                   </div>
-                 </div>
-               </div>
-             </div>
+              <div className="bg-brand-card border border-brand-border rounded-xl p-6 shadow-md flex-1">
+                <h2 className="text-sm font-bold mb-4">Requires Attention</h2>
+                <div className="space-y-4">
+                  {pendingCount > 0 && (
+                    <div className="flex gap-3 items-start cursor-pointer hover:text-brand-cyan transition-colors" onClick={() => router.push("/professor/students")}>
+                      <div className="mt-1 text-yellow-500">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+                      </div>
+                      <div>
+                        <div className="text-xs font-semibold mb-0.5">{pendingCount} student{pendingCount > 1 ? "s" : ""} need validation</div>
+                        <div className="text-[10px] text-brand-muted">Awaiting admission approval</div>
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex gap-3 items-start">
+                    <div className="mt-1 text-red-500">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold mb-0.5">3 students failing Lab 2</div>
+                      <div className="text-[10px] text-brand-muted">2 hours ago</div>
+                    </div>
+                  </div>
+                  <div className="flex gap-3 items-start">
+                    <div className="mt-1 text-brand-cyan">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold mb-0.5">New discussion thread in Module 3</div>
+                      <div className="text-[10px] text-brand-muted">5 hours ago</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
            </div>
         </div>
 

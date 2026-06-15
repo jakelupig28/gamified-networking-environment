@@ -8,6 +8,7 @@ export default function Sidebar({ activePath }: { activePath: string }) {
   const [userName, setUserName] = useState("User");
   const [userRole, setUserRole] = useState("");
   const [profilePic, setProfilePic] = useState<string | null>(null);
+  const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
     // Check initial preference on mount from localStorage
@@ -37,6 +38,30 @@ export default function Sidebar({ activePath }: { activePath: string }) {
     };
     window.addEventListener("profilePicUpdated", handlePicUpdate);
     return () => window.removeEventListener("profilePicUpdated", handlePicUpdate);
+  }, []);
+
+  useEffect(() => {
+    const fetchPendingCount = async () => {
+      try {
+        const res = await fetch("/api/users");
+        const data = await res.json();
+        if (data.success) {
+          const pending = data.users.filter(
+            (u: { role: string; status?: string }) => u.role === "Student" && (u.status === "pending" || !u.status)
+          );
+          setPendingCount(pending.length);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    };
+
+    fetchPendingCount();
+
+    window.addEventListener("studentsUpdated", fetchPendingCount);
+    return () => {
+      window.removeEventListener("studentsUpdated", fetchPendingCount);
+    };
   }, []);
 
   const toggleTheme = () => {
@@ -134,16 +159,26 @@ export default function Sidebar({ activePath }: { activePath: string }) {
             activePath.includes(item.name.toLowerCase()) ||
             (item.name === 'Subjects' && activePath.includes('/student/curriculum'));
           
+          const showBadge = (item.name === 'Students' && pendingCount > 0) || 
+                            (item.name === 'User Management' && pendingCount > 0);
+          
           return (
             <Link 
               key={item.name} 
               href={item.path} 
-              className={`flex items-center gap-3 px-4 py-3 rounded-md font-semibold transition-colors ${isActive ? 'bg-brand-cyan text-brand-bg' : 'text-brand-muted hover:bg-brand-card hover:text-brand-text'}`}
+              className={`flex items-center justify-between px-4 py-3 rounded-md font-semibold transition-colors ${isActive ? 'bg-brand-cyan text-brand-bg' : 'text-brand-muted hover:bg-brand-card hover:text-brand-text'}`}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                {item.icon}
-              </svg>
-              {item.name}
+              <div className="flex items-center gap-3">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  {item.icon}
+                </svg>
+                {item.name}
+              </div>
+              {showBadge && (
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold transition-all ${isActive ? 'bg-brand-bg text-brand-cyan font-extrabold' : 'bg-red-500 text-white animate-pulse'}`}>
+                  {pendingCount}
+                </span>
+              )}
             </Link>
           );
         })}

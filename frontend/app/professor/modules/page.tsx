@@ -82,6 +82,13 @@ export default function ProfessorModules() {
   const [expandedTopics, setExpandedTopics] = useState<Record<number, boolean>>({});
   const [expandedSubtopics, setExpandedSubtopics] = useState<Record<number, boolean>>({});
 
+  // Import from file states
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [isParsing, setIsParsing] = useState(false);
+  const [parsedModule, setParsedModule] = useState<Module | null>(null);
+  const [importError, setImportError] = useState("");
+
   // Initial load
   useEffect(() => {
     const fetchModules = async () => {
@@ -180,6 +187,73 @@ export default function ProfessorModules() {
     updateAndPersistModules(updated);
     setNewModuleTitle("");
     setCurrentModuleId(newModule.id);
+  };
+
+  const handleFileImport = async () => {
+    if (!importFile) return;
+    setIsParsing(true);
+    setImportError("");
+    setParsedModule(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", importFile);
+
+      const res = await fetch("/api/modules/import", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (data.success && data.module) {
+        const newMod: Module = {
+          id: Date.now(),
+          title: data.module.title || importFile.name.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " "),
+          topics: (data.module.topics || []).map((t: any, tIdx: number) => ({
+            id: Date.now() + tIdx * 1000 + 1,
+            title: t.title || `Topic ${tIdx + 1}`,
+            materials: (t.materials || []).map((m: any, mIdx: number) => ({
+              id: Date.now() + tIdx * 1000 + mIdx + 100000,
+              type: m.type,
+              title: m.title,
+              content: m.content,
+              textStyle: m.textStyle,
+              imageAlign: m.imageAlign
+            })),
+            subtopics: (t.subtopics || []).map((s: any, sIdx: number) => ({
+              id: Date.now() + tIdx * 1000 + sIdx + 200000,
+              title: s.title || `Subtopic ${sIdx + 1}`,
+              materials: (s.materials || []).map((sm: any, smIdx: number) => ({
+                id: Date.now() + tIdx * 1000 + sIdx * 100 + smIdx + 300000,
+                type: sm.type,
+                title: sm.title,
+                content: sm.content,
+                textStyle: sm.textStyle,
+                imageAlign: sm.imageAlign
+              }))
+            }))
+          }))
+        };
+        setParsedModule(newMod);
+      } else {
+        setImportError(data.message || "Failed to parse document structure.");
+      }
+    } catch (err) {
+      console.error("File import error:", err);
+      setImportError("Error occurred during document scanning. Please retry.");
+    } finally {
+      setIsParsing(false);
+    }
+  };
+
+  const confirmImportModule = () => {
+    if (!parsedModule) return;
+    const updated = [parsedModule, ...modules];
+    updateAndPersistModules(updated);
+    setCurrentModuleId(parsedModule.id);
+    setIsImportModalOpen(false);
+    setParsedModule(null);
+    setImportFile(null);
   };
 
   const deleteModule = (id: number, e: React.MouseEvent) => {
@@ -761,6 +835,17 @@ export default function ProfessorModules() {
                 </button>
               </div>
 
+              <div className="flex flex-col gap-2 mt-1">
+                <div className="text-center text-xs text-brand-muted my-1">— OR —</div>
+                <button
+                  onClick={() => setIsImportModalOpen(true)}
+                  className="w-full bg-brand-cyan/10 hover:bg-brand-cyan/25 border border-brand-cyan/35 text-brand-cyan font-bold py-2.5 rounded-lg text-sm transition-all flex items-center justify-center gap-2"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                  Auto-Generate from PDF/DOCX
+                </button>
+              </div>
+
               <div className="border-t border-brand-border/40 my-1"></div>
 
               {/* Module Listing with Search */}
@@ -1170,7 +1255,7 @@ export default function ProfessorModules() {
                                                   <input
                                                     type="file"
                                                     className="hidden"
-                                                    accept={addingMaterialTo.materialType === "image" ? "image/*" : "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation"}
+                                                    accept={addingMaterialTo.materialType === "image" ? "image/*" : "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
                                                     onChange={(e) => handleMaterialFileUpload(e, addingMaterialTo.materialType as 'image' | 'file')}
                                                   />
                                                 </label>
@@ -1792,15 +1877,38 @@ export default function ProfessorModules() {
                                                   className="absolute top-0 left-0 w-full h-full border-0"
                                                 ></iframe>
                                               </div>
+                                            ) : mat.content.startsWith('yt-search:') ? (
+                                              <a
+                                                href={`https://www.youtube.com/results?search_query=${encodeURIComponent(mat.content.replace('yt-search:', ''))}`}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="flex items-center gap-3 p-3.5 bg-gradient-to-r from-red-500/15 via-red-500/5 to-brand-bg/50 border border-red-500/30 hover:border-red-500/60 rounded-xl text-brand-text text-xs hover:shadow-md transition-all group cursor-pointer"
+                                              >
+                                                <div className="p-2.5 bg-red-600 rounded-lg group-hover:bg-red-500 transition-colors shrink-0 shadow-sm">
+                                                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>
+                                                </div>
+                                                <div className="flex flex-col gap-0.5 min-w-0">
+                                                  <span className="font-semibold text-brand-text truncate">{mat.title}</span>
+                                                  <span className="text-[9px] text-red-400/90 font-medium flex items-center gap-1">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0C.488 3.45.029 5.804 0 12c.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0C23.512 20.55 23.971 18.196 24 12c-.029-6.185-.484-8.549-4.385-8.816zM9 16V8l8 4-8 4z"/></svg>
+                                                    Watch on YouTube
+                                                  </span>
+                                                </div>
+                                              </a>
                                             ) : (
                                               <a
                                                 href={mat.content}
                                                 target="_blank"
                                                 rel="noreferrer"
-                                                className="flex items-center gap-2.5 p-3 bg-brand-bg/50 border border-brand-border hover:border-brand-cyan rounded-xl text-brand-cyan text-xs hover:underline transition-colors"
+                                                className="flex items-center gap-3 p-3.5 bg-gradient-to-r from-red-500/10 to-brand-bg/50 border border-red-500/30 hover:border-red-500/60 rounded-xl text-brand-text text-xs hover:shadow-md transition-all group"
                                               >
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-                                                <span>{mat.title} (External Video URL)</span>
+                                                <div className="p-2 bg-red-500/15 rounded-lg group-hover:bg-red-500/25 transition-colors shrink-0">
+                                                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-red-400"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+                                                </div>
+                                                <div className="flex flex-col gap-0.5 min-w-0">
+                                                  <span className="font-semibold text-brand-text truncate">{mat.title}</span>
+                                                  <span className="text-[9px] text-red-400/80 font-medium">▶ Watch Video</span>
+                                                </div>
                                               </a>
                                             )}
                                           </div>
@@ -1813,9 +1921,17 @@ export default function ProfessorModules() {
                                             mat.imageAlign === "right" ? "justify-end" :
                                             "justify-center"
                                           }`}>
-                                            <div className="border border-brand-border/30 bg-brand-bg/25 rounded-xl p-2.5 flex justify-center max-w-full">
-                                              <img src={mat.content} alt={mat.title} className="max-w-full h-auto rounded max-h-[200px] object-contain" />
-                                            </div>
+                                            {mat.content ? (
+                                              <div className="border border-brand-border/30 bg-brand-bg/25 rounded-xl p-2.5 flex justify-center max-w-full">
+                                                <img src={mat.content} alt={mat.title} className="max-w-full h-auto rounded max-h-[200px] object-contain" />
+                                              </div>
+                                            ) : (
+                                              <div className="border border-dashed border-brand-border/50 bg-brand-bg/15 rounded-xl p-4 flex flex-col items-center gap-2 max-w-xs">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-brand-muted/60"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                                                <span className="text-[10px] text-brand-muted text-center">{mat.title}</span>
+                                                <span className="text-[8px] text-brand-muted/50">Image not available from PDF import</span>
+                                              </div>
+                                            )}
                                           </div>
                                         )}
 
@@ -1876,6 +1992,212 @@ export default function ProfessorModules() {
 
           </div>
         )}
+      {/* Import Modal */}
+      {isImportModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="bg-brand-card border border-brand-border w-full max-w-3xl max-h-[90vh] rounded-2xl p-6 shadow-2xl flex flex-col gap-4 overflow-hidden text-brand-text">
+            
+            {/* Modal Header */}
+            <div className="flex justify-between items-center border-b border-brand-border/40 pb-3">
+              <div>
+                <h3 className="text-lg font-bold text-brand-text flex items-center gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-brand-cyan"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                  Auto-Generate Module from Document
+                </h3>
+                <p className="text-xs text-brand-muted mt-0.5">Parse PDF or DOCX documents into an organized module outline.</p>
+              </div>
+              <button
+                onClick={() => {
+                  setIsImportModalOpen(false);
+                  setParsedModule(null);
+                  setImportFile(null);
+                  setImportError("");
+                }}
+                className="text-brand-muted hover:text-brand-text p-1.5 hover:bg-brand-bg rounded-lg transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+
+            {/* Modal Body / Steps */}
+            <div className="flex-grow overflow-y-auto pr-1">
+              {/* STEP 1: Upload */}
+              {!isParsing && !parsedModule && (
+                <div className="flex flex-col gap-5 py-4">
+                  <div className="border-2 border-dashed border-brand-border/60 hover:border-brand-cyan/60 rounded-xl p-8 flex flex-col items-center justify-center text-center cursor-pointer bg-brand-bg/10 hover:bg-brand-bg/20 transition-all relative">
+                    <input
+                      type="file"
+                      accept=".pdf,.docx"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) setImportFile(file);
+                      }}
+                      className="absolute inset-0 opacity-0 cursor-pointer"
+                    />
+                    
+                    <div className="p-4 bg-brand-cyan/10 text-brand-cyan rounded-full mb-3 border border-brand-cyan/20">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M8 13h8"/><path d="M8 17h8"/><path d="M8 9h1"/></svg>
+                    </div>
+
+                    <h4 className="text-sm font-bold">Select File or Drag & Drop Here</h4>
+                    <p className="text-xs text-brand-muted mt-1 max-w-sm">
+                      Upload standard `.docx` or `.pdf` curriculum sheets (up to 20MB).
+                    </p>
+                    {importFile && (
+                      <div className="mt-4 px-3 py-1.5 bg-brand-cyan/10 border border-brand-cyan/20 rounded-lg text-brand-cyan text-xs font-semibold flex items-center gap-1.5">
+                        <span>Selected: {importFile.name} ({(importFile.size / 1024).toFixed(1)} KB)</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="bg-brand-bg/40 border border-brand-border/40 rounded-xl p-4 flex flex-col gap-2">
+                    <h5 className="text-xs font-bold text-brand-cyan">How It Works:</h5>
+                    <ul className="text-[11px] text-brand-muted space-y-1.5 list-disc list-inside">
+                      <li><strong>Topics & Subtopics:</strong> Auto-split based on headings and markers.</li>
+                      <li><strong>Readings:</strong> Long paragraphs converted to text pages.</li>
+                      <li><strong>Videos:</strong> YouTube links detected and embedded as video panels.</li>
+                      <li><strong>Images:</strong> DOCX embedded pictures extracted as inline image cards.</li>
+                    </ul>
+                  </div>
+
+                  {importError && (
+                    <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3.5 rounded-lg text-xs font-semibold">
+                      {importError}
+                    </div>
+                  )}
+
+                  <button
+                    onClick={handleFileImport}
+                    disabled={!importFile}
+                    className="w-full bg-brand-cyan hover:bg-brand-cyan-hover disabled:opacity-40 text-brand-bg font-bold py-3 rounded-lg text-sm transition-colors mt-2"
+                  >
+                    Start Automatic Scanning
+                  </button>
+                </div>
+              )}
+
+              {/* STEP 2: Parsing Loading State */}
+              {isParsing && (
+                <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
+                  <div className="relative w-16 h-16">
+                    <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-brand-cyan"></div>
+                    <div className="absolute inset-2 bg-brand-card rounded-full flex items-center justify-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-brand-cyan animate-pulse"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-brand-text animate-pulse">Scanning Document Structure...</h4>
+                    <p className="text-xs text-brand-muted mt-1 max-w-sm">
+                      Our system is analyzing text blocks, headings, extraction points, and image attachments. This may take a few seconds.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 3: Preview Structure */}
+              {parsedModule && (
+                <div className="flex flex-col gap-4 py-2">
+                  <div className="bg-brand-bg/40 border border-brand-border/40 p-4 rounded-xl flex flex-col gap-2">
+                    <label className="text-xs font-bold text-brand-cyan uppercase tracking-wider">Generated Module Name:</label>
+                    <input
+                      value={parsedModule.title}
+                      onChange={(e) => setParsedModule({ ...parsedModule, title: e.target.value })}
+                      placeholder="Enter module name"
+                      className="w-full bg-brand-bg border border-brand-border rounded-lg p-2.5 text-sm font-bold text-brand-text focus:outline-none focus:border-brand-cyan"
+                    />
+                  </div>
+
+                  <div className="flex justify-between items-center px-1">
+                    <span className="text-xs font-bold text-brand-muted uppercase tracking-wider">Extracted Structure Preview:</span>
+                    <span className="text-[10px] text-brand-muted">
+                      {parsedModule.topics.length} topics • {parsedModule.topics.reduce((s, t) => s + (t.subtopics?.length || 0), 0)} subtopics
+                    </span>
+                  </div>
+
+                  {/* Render Parsed Outline */}
+                  <div className="border border-brand-border/60 rounded-xl overflow-hidden bg-brand-bg/10 max-h-[340px] overflow-y-auto flex flex-col gap-3 p-4">
+                    {parsedModule.topics.length === 0 ? (
+                      <div className="text-center py-6 text-xs text-brand-muted italic">
+                        No headings or topics could be parsed from the file content. An empty module structure will be generated.
+                      </div>
+                    ) : (
+                      parsedModule.topics.map((topic, tIdx) => (
+                        <div key={topic.id} className="border border-brand-border/30 rounded-lg p-3 bg-brand-card/30 flex flex-col gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[9px] font-mono font-bold bg-brand-cyan/15 text-brand-cyan px-1.5 py-0.5 rounded">
+                              Topic {tIdx + 1}
+                            </span>
+                            <span className="text-xs font-bold text-brand-text">{topic.title}</span>
+                          </div>
+
+                          {/* Render materials preview inside topic */}
+                          {(topic.materials || []).length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 pl-4">
+                              {(topic.materials || []).map((m) => (
+                                <span key={m.id} className="text-[9px] bg-brand-bg border border-brand-border/50 text-brand-muted px-2 py-0.5 rounded flex items-center gap-1 font-medium">
+                                  {m.type === 'text' && '📄 Reading'}
+                                  {m.type === 'video' && '🎥 Video link'}
+                                  {m.type === 'image' && '🖼️ Image'}
+                                  <span>{m.title}</span>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Subtopics outline preview */}
+                          {(topic.subtopics || []).length > 0 && (
+                            <div className="pl-4 flex flex-col gap-2 mt-1 border-l border-brand-border/30 ml-2">
+                              {(topic.subtopics || []).map((sub, sIdx) => (
+                                <div key={sub.id} className="flex flex-col gap-1.5">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[9px] text-brand-muted font-bold">•</span>
+                                    <span className="text-[11px] font-semibold text-brand-text/90">{sub.title}</span>
+                                  </div>
+                                  {(sub.materials || []).length > 0 && (
+                                    <div className="flex flex-wrap gap-1.5 pl-3">
+                                      {(sub.materials || []).map((sm) => (
+                                        <span key={sm.id} className="text-[8px] bg-brand-bg/60 border border-brand-border/40 text-brand-muted px-1.5 py-0.5 rounded flex items-center gap-1">
+                                          {sm.type === 'text' && '📄 Reading'}
+                                          {sm.type === 'video' && '🎥 Video link'}
+                                          {sm.type === 'image' && '🖼️ Image'}
+                                          <span>{sm.title}</span>
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  <div className="flex gap-3 mt-2">
+                    <button
+                      onClick={() => {
+                        setParsedModule(null);
+                        setImportFile(null);
+                      }}
+                      className="flex-grow bg-brand-bg hover:bg-brand-bg/75 border border-brand-border text-brand-text font-bold py-2.5 rounded-lg text-xs transition-colors"
+                    >
+                      Start Over
+                    </button>
+                    <button
+                      onClick={confirmImportModule}
+                      className="flex-grow bg-brand-cyan hover:bg-brand-cyan-hover text-brand-bg font-bold py-2.5 rounded-lg text-xs transition-colors"
+                    >
+                      Import into Class Curriculum
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+          </div>
+        </div>
+      )}
       </main>
     </div>
   );

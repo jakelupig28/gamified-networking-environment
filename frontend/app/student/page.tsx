@@ -27,6 +27,7 @@ type Module = {
   id: number;
   title: string;
   topics: Topic[];
+  pretest?: any[];
 };
 
 type UserProfile = {
@@ -46,6 +47,8 @@ export default function StudentDashboard() {
   const [modules, setModules] = useState<Module[]>([]);
   const [completedTopics, setCompletedTopics] = useState<Record<number, boolean>>({});
   const [watchedVideos, setWatchedVideos] = useState<Record<number, boolean>>({});
+  const [completedPretests, setCompletedPretests] = useState<Record<number, boolean>>({});
+  const [pretestScores, setPretestScores] = useState<Record<number, number>>({});
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -72,6 +75,22 @@ export default function StudentDashboard() {
         console.error(e);
       }
     }
+    const storedPretests = localStorage.getItem(`completed_pretests_${savedNameFull}`);
+    if (storedPretests) {
+      try {
+        setCompletedPretests(JSON.parse(storedPretests));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    const storedScores = localStorage.getItem(`pretest_scores_${savedNameFull}`);
+    if (storedScores) {
+      try {
+        setPretestScores(JSON.parse(storedScores));
+      } catch (e) {
+        console.error(e);
+      }
+    }
 
     const fetchData = async () => {
       try {
@@ -91,7 +110,8 @@ export default function StudentDashboard() {
         const modulesRes = await fetch("/api/modules");
         const modulesData = await modulesRes.json();
         if (modulesData.success && modulesData.modules) {
-          setModules(modulesData.modules);
+          const processed = ensureInteractiveActivity(modulesData.modules);
+          setModules(processed);
         }
       } catch (e) {
         console.error("Error fetching dashboard data:", e);
@@ -103,13 +123,56 @@ export default function StudentDashboard() {
     fetchData();
   }, []);
 
+  const ensureInteractiveActivity = (mods: Module[]): Module[] => {
+    if (mods.length === 0) return mods;
+    return mods.map((mod, idx) => {
+      if (idx === 0) {
+        const hasActivity = mod.topics.some(t => t.id === 999999);
+        if (!hasActivity) {
+          return {
+            ...mod,
+            topics: [
+              ...mod.topics,
+              {
+                id: 999999,
+                title: "Interactive Subnetting Activity",
+                materials: [
+                  {
+                    id: 9999991,
+                    type: "text",
+                    title: "Hands-on Exercises",
+                    content: "interactive-activity-placeholder"
+                  }
+                ],
+                subtopics: []
+              }
+            ]
+          };
+        }
+      }
+      return mod;
+    });
+  };
+
+  const isTopicUnlocked = (mod: Module, topicIdx: number): boolean => {
+    if (mod.pretest && mod.pretest.length > 0) {
+      if (!completedPretests[mod.id]) {
+        return false;
+      }
+    }
+    if (topicIdx === 0) return true;
+    const prevTopic = mod.topics[topicIdx - 1];
+    return !!completedTopics[prevTopic.id];
+  };
+
   const getModuleProgress = (mod: Module): number => {
     if (mod.topics.length === 0) return 0;
     let sum = 0;
-    mod.topics.forEach((topic) => {
-      if (completedTopics[topic.id]) {
+    mod.topics.forEach((topic, idx) => {
+      const isUnlocked = isTopicUnlocked(mod, idx);
+      if (isUnlocked && completedTopics[topic.id]) {
         sum += 100;
-      } else {
+      } else if (isUnlocked) {
         const videoMat = topic.materials?.find(m => m.type === "video") || 
                          topic.subtopics?.flatMap(s => s.materials || []).find(m => m.type === "video");
         if (videoMat && watchedVideos[videoMat.id]) {
@@ -122,7 +185,7 @@ export default function StudentDashboard() {
 
   const getModuleTopicsCounts = (mod: Module) => {
     const total = mod.topics.length;
-    const completed = mod.topics.filter(t => completedTopics[t.id]).length;
+    const completed = mod.topics.filter((t, idx) => isTopicUnlocked(mod, idx) && completedTopics[t.id]).length;
     return { total, completed };
   };
 
@@ -130,17 +193,18 @@ export default function StudentDashboard() {
   const totalTopicsCount = modules.reduce((acc, mod) => acc + mod.topics.length, 0);
 
   const completedTopicsCount = modules.reduce((acc, mod) => {
-    return acc + mod.topics.filter(t => completedTopics[t.id]).length;
+    return acc + mod.topics.filter((t, idx) => isTopicUnlocked(mod, idx) && completedTopics[t.id]).length;
   }, 0);
 
   const overallProgress = (() => {
     if (totalTopicsCount === 0) return 0;
     let sum = 0;
     modules.forEach((mod) => {
-      mod.topics.forEach((topic) => {
-        if (completedTopics[topic.id]) {
+      mod.topics.forEach((topic, idx) => {
+        const isUnlocked = isTopicUnlocked(mod, idx);
+        if (isUnlocked && completedTopics[topic.id]) {
           sum += 100;
-        } else {
+        } else if (isUnlocked) {
           const videoMat = topic.materials?.find(m => m.type === "video") || 
                            topic.subtopics?.flatMap(s => s.materials || []).find(m => m.type === "video");
           if (videoMat && watchedVideos[videoMat.id]) {

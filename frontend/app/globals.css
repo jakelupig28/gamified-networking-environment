@@ -61,3 +61,16 @@ body {
 .animate-float-2 { animation: float 7s ease-in-out 2s infinite; }
 .animate-float-3 { animation: float 5s ease-in-out 1s infinite; }
 .animate-float-4 { animation: float 8s ease-in-out 3s infinite; }
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.animate-fadeIn { animation: fadeIn 0.15s ease-out forwards; }
+.animate-scaleIn { animation: scaleIn 0.15s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }

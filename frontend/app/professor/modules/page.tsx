@@ -29,10 +29,17 @@ type Topic = {
   materials?: Material[];
 };
 
+type PretestQuestion = {
+  question: string;
+  options: string[];
+  correctAnswer: number;
+};
+
 type Module = {
   id: number;
   title: string;
   topics: Topic[];
+  pretest?: PretestQuestion[];
 };
 
 const DEFAULT_MODULES: Module[] = [];
@@ -98,6 +105,56 @@ export default function ProfessorModules() {
   const [isParsing, setIsParsing] = useState(false);
   const [parsedModule, setParsedModule] = useState<Module | null>(null);
   const [importError, setImportError] = useState("");
+
+  // Pre-test states
+  const [pastedPretestText, setPastedPretestText] = useState("");
+  const [isPastingPretest, setIsPastingPretest] = useState(false);
+  const [isPretestLoading, setIsPretestLoading] = useState(false);
+
+  // Custom modal dialog states
+  const [modalConfig, setModalConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    type: "alert" | "confirm";
+    onConfirm?: () => void;
+    onCancel?: () => void;
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+    type: "alert",
+  });
+
+  const showAlert = (title: string, message: string, onConfirm?: () => void) => {
+    setModalConfig({
+      isOpen: true,
+      title,
+      message,
+      type: "alert",
+      onConfirm: () => {
+        setModalConfig(prev => ({ ...prev, isOpen: false }));
+        if (onConfirm) onConfirm();
+      }
+    });
+  };
+
+  const showConfirm = (title: string, message: string, onConfirm: () => void, onCancel?: () => void) => {
+    setModalConfig({
+      isOpen: true,
+      title,
+      message,
+      type: "confirm",
+      onConfirm: () => {
+        setModalConfig(prev => ({ ...prev, isOpen: false }));
+        onConfirm();
+      },
+      onCancel: () => {
+        setModalConfig(prev => ({ ...prev, isOpen: false }));
+        if (onCancel) onCancel();
+      }
+    });
+  };
 
   // Initial load
   useEffect(() => {
@@ -209,6 +266,119 @@ export default function ProfessorModules() {
     updateAndPersistModules(updated);
     setNewModuleTitle("");
     setCurrentModuleId(newModule.id);
+  };
+
+  const handlePretestUpload = async (e: React.ChangeEvent<HTMLInputElement>, moduleId: number) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsPretestLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("/api/pretest/import", {
+        method: "POST",
+        body: formData
+      });
+
+      const data = await res.json();
+      if (data.success && data.questions) {
+        await savePretestQuestions(moduleId, data.questions);
+      } else {
+        showAlert("Parse Failed", data.message || "Failed to scan pre-test questions.");
+      }
+    } catch (error: any) {
+      console.error("Error uploading pretest:", error);
+      showAlert("Upload Error", "Error parsing pre-test: " + error.message);
+    } finally {
+      setIsPretestLoading(false);
+      e.target.value = "";
+    }
+  };
+
+  const handlePretestTextSubmit = async (moduleId: number) => {
+    if (!pastedPretestText.trim()) return;
+
+    setIsPretestLoading(true);
+    try {
+      const res = await fetch("/api/pretest/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: pastedPretestText })
+      });
+
+      const data = await res.json();
+      if (data.success && data.questions) {
+        await savePretestQuestions(moduleId, data.questions);
+        setPastedPretestText("");
+        setIsPastingPretest(false);
+      } else {
+        showAlert("Parse Failed", data.message || "Failed to parse pasted pre-test text.");
+      }
+    } catch (error: any) {
+      console.error("Error submitting pasted pretest:", error);
+      showAlert("Error", "Error parsing pre-test: " + error.message);
+    } finally {
+      setIsPretestLoading(false);
+    }
+  };
+
+  const savePretestQuestions = async (moduleId: number, questions: any[]) => {
+    if (!Array.isArray(questions) || questions.length === 0) {
+      showAlert("Save Failed", "Invalid questions array.");
+      return;
+    }
+    
+    try {
+      questions.forEach((q: any, index: number) => {
+        if (!q.question || typeof q.question !== "string") {
+          throw new Error(`Item ${index + 1} is missing a valid 'question' string.`);
+        }
+        if (!Array.isArray(q.options) || q.options.length !== 4) {
+          throw new Error(`Item ${index + 1} must have an 'options' array with exactly 4 strings.`);
+        }
+        q.options.forEach((opt: any, oIdx: number) => {
+          if (typeof opt !== "string") {
+            throw new Error(`Item ${index + 1} option ${oIdx + 1} must be a string.`);
+          }
+        });
+        if (typeof q.correctAnswer !== "number" || q.correctAnswer < 0 || q.correctAnswer > 3) {
+          throw new Error(`Item ${index + 1} 'correctAnswer' must be a number between 0 and 3.`);
+        }
+      });
+    } catch (err: any) {
+      showAlert("Validation Error", err.message);
+      return;
+    }
+
+    const performSave = async () => {
+      const updated = modules.map(m =>
+        m.id === moduleId ? { ...m, pretest: questions } : m
+      );
+      await updateAndPersistModules(updated);
+      showAlert("Pre-test Saved", "Pre-test saved successfully!");
+    };
+
+    await performSave();
+  };
+
+  const removePretest = (moduleId: number) => {
+    showConfirm(
+      "Remove Pre-test",
+      "Are you sure you want to remove the pre-test from this module?",
+      () => {
+        const updated = modules.map(m => {
+          if (m.id === moduleId) {
+            const { pretest, ...rest } = m;
+            return rest as Module;
+          }
+          return m;
+        });
+        updateAndPersistModules(updated);
+        showAlert("Success", "Pre-test removed successfully.");
+      }
+    );
   };
 
   const handleFileImport = async () => {
@@ -1280,6 +1450,118 @@ export default function ProfessorModules() {
                             Add Topic
                           </button>
                         </div>
+                      </div>
+
+                      {/* Module Pre-test Section */}
+                      <div className="mb-6 bg-brand-bg/40 p-4 rounded-xl border border-brand-border/45 flex flex-col gap-4">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                          <div>
+                            <h4 className="text-sm font-bold flex items-center gap-1.5">
+                              📋 Module Pre-test
+                            </h4>
+                            <p className="text-xs text-brand-muted mt-1">
+                              {selectedModule.pretest && selectedModule.pretest.length > 0
+                                ? `Contains ${selectedModule.pretest.length} questions`
+                                : "No pre-test active. Students can access topics immediately."}
+                            </p>
+                          </div>
+                          
+                          <div className="flex flex-wrap gap-2">
+                            {/* Upload Document Button */}
+                            <label className="px-3 py-1.5 bg-brand-cyan/10 hover:bg-brand-cyan/20 border border-brand-cyan/20 text-brand-cyan font-bold text-xs rounded-lg cursor-pointer transition-colors whitespace-nowrap flex items-center gap-1.5 select-none">
+                              📁 Upload Doc (PDF/DOCX/TXT)
+                              <input
+                                type="file"
+                                accept=".pdf,.docx,.txt"
+                                className="hidden"
+                                disabled={isPretestLoading}
+                                onChange={(e) => handlePretestUpload(e, selectedModule.id)}
+                              />
+                            </label>
+                            
+
+
+                            {/* Paste text button */}
+                            <button
+                              onClick={() => setIsPastingPretest(!isPastingPretest)}
+                              disabled={isPretestLoading}
+                              className="px-3 py-1.5 bg-brand-cyan/10 hover:bg-brand-cyan/20 border border-brand-cyan/20 text-brand-cyan font-bold text-xs rounded-lg transition-colors cursor-pointer select-none"
+                            >
+                              ✍️ Paste plain text
+                            </button>
+
+                            {selectedModule.pretest && selectedModule.pretest.length > 0 && (
+                              <button
+                                onClick={() => removePretest(selectedModule.id)}
+                                disabled={isPretestLoading}
+                                className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 font-bold text-xs rounded-lg transition-colors cursor-pointer"
+                              >
+                                Remove Pre-test
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Spinner / Loader */}
+                        {isPretestLoading && (
+                          <div className="flex items-center justify-center py-4 bg-brand-bg/10 rounded-xl border border-brand-border/20">
+                            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-brand-cyan mr-2.5"></div>
+                            <span className="text-xs text-brand-muted">Scanning and parsing pre-test questions...</span>
+                          </div>
+                        )}
+
+                        {/* Paste pretest text area */}
+                        {isPastingPretest && !isPretestLoading && (
+                          <div className="bg-brand-card/50 border border-brand-border/40 rounded-xl p-4 flex flex-col gap-3">
+                            <div>
+                              <h5 className="font-bold text-xs text-brand-cyan">Paste Pre-test Text</h5>
+                              <p className="text-[10px] text-brand-muted mt-0.5">
+                                Formats supported: Questions starting with "1.", options starting with "A.", correct answers marked with an asterisk (e.g. *A) or Answer: A.
+                              </p>
+                            </div>
+                            <textarea
+                              value={pastedPretestText}
+                              onChange={(e) => setPastedPretestText(e.target.value)}
+                              placeholder="Paste questions here...&#10;1. What is CIDR?&#10;A. Classless Inter-Domain Routing&#10;B. Classful Inter-Domain Routing&#10;*C. Computer Internet Data Receiver&#10;D. None&#10;Correct Answer: A"
+                              className="w-full h-44 bg-brand-bg border border-brand-border rounded-lg p-2.5 text-xs text-brand-text focus:outline-none focus:border-brand-cyan/70 font-mono placeholder-brand-muted/40"
+                            />
+                            <div className="flex justify-end gap-2">
+                              <button
+                                onClick={() => {
+                                  setIsPastingPretest(false);
+                                  setPastedPretestText("");
+                                }}
+                                className="px-3.5 py-1.5 bg-brand-bg border border-brand-border text-brand-muted text-xs font-semibold rounded-lg hover:text-brand-text transition-colors"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                onClick={() => handlePretestTextSubmit(selectedModule.id)}
+                                disabled={!pastedPretestText.trim()}
+                                className="px-4 py-1.5 bg-brand-cyan hover:bg-brand-cyan-hover disabled:opacity-40 text-brand-bg font-extrabold text-xs rounded-lg transition-colors whitespace-nowrap"
+                              >
+                                Parse and Import Quiz
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {selectedModule.pretest && selectedModule.pretest.length > 0 && !isPastingPretest && (
+                          <div className="text-xs bg-brand-card border border-brand-border/40 rounded-lg p-3 max-h-[220px] overflow-y-auto flex flex-col gap-3">
+                            {selectedModule.pretest.map((q, idx) => (
+                              <div key={idx} className="border-b border-brand-border/20 last:border-b-0 pb-3 last:pb-0">
+                                <div className="font-bold text-brand-text mb-1">Q{idx + 1}: {q.question}</div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-brand-muted pl-2 mt-1">
+                                  {q.options.map((opt, oIdx) => (
+                                    <div key={oIdx} className={`p-1 rounded ${oIdx === q.correctAnswer ? "text-brand-cyan font-bold bg-brand-cyan/5" : ""}`}>
+                                      {String.fromCharCode(65 + oIdx)}. {opt}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
 
                       {/* Topics List */}
@@ -2625,6 +2907,39 @@ export default function ProfessorModules() {
         </div>
       )}
       </main>
+
+      {/* Custom Dialog Alert/Confirm Modal */}
+      {modalConfig.isOpen && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-brand-card border border-brand-border/80 rounded-2xl w-full max-w-sm p-6 shadow-2xl flex flex-col gap-4 transform transition-all scale-100 animate-scaleIn">
+            <div>
+              <h3 className="font-extrabold text-sm text-brand-text flex items-center gap-2">
+                {modalConfig.type === 'confirm' ? '❓' : '🔔'} {modalConfig.title}
+              </h3>
+              <p className="text-xs text-brand-muted mt-2 leading-relaxed whitespace-pre-line">
+                {modalConfig.message}
+              </p>
+            </div>
+            
+            <div className="flex justify-end gap-2 mt-2">
+              {modalConfig.type === 'confirm' && (
+                <button
+                  onClick={modalConfig.onCancel}
+                  className="px-3.5 py-1.5 bg-brand-bg border border-brand-border text-brand-muted text-xs font-semibold rounded-lg hover:text-brand-text transition-colors cursor-pointer select-none"
+                >
+                  Cancel
+                </button>
+              )}
+              <button
+                onClick={modalConfig.onConfirm}
+                className="px-4 py-1.5 bg-brand-cyan hover:bg-brand-cyan-hover text-brand-bg font-extrabold text-xs rounded-lg transition-colors whitespace-nowrap cursor-pointer select-none"
+              >
+                {modalConfig.type === 'confirm' ? 'Yes, Proceed' : 'OK'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

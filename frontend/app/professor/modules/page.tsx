@@ -78,6 +78,16 @@ export default function ProfessorModules() {
   const [editingSubtopicId, setEditingSubtopicId] = useState<number | null>(null);
   const [editingSubtopicTitle, setEditingSubtopicTitle] = useState("");
 
+  // Editing material states
+  const [editingMaterialId, setEditingMaterialId] = useState<number | null>(null);
+  const [editingMaterialTitle, setEditingMaterialTitle] = useState("");
+  const [editingMaterialContent, setEditingMaterialContent] = useState("");
+  const [editingMaterialTextStyle, setEditingMaterialTextStyle] = useState<"normal" | "bold" | "italic" | "heading" | "quote" | "code">("normal");
+  const [editingMaterialImageAlign, setEditingMaterialImageAlign] = useState<"left" | "center" | "right">("center");
+  const [editingMaterialFileName, setEditingMaterialFileName] = useState("");
+  const [editingMaterialFileSize, setEditingMaterialFileSize] = useState("");
+  const [editingMaterialType, setEditingMaterialType] = useState<MaterialType>("text");
+
   // Collapsible topics state
   const [expandedTopics, setExpandedTopics] = useState<Record<number, boolean>>({});
   const [expandedSubtopics, setExpandedSubtopics] = useState<Record<number, boolean>>({});
@@ -100,7 +110,11 @@ export default function ProfessorModules() {
           if (data.modules.length > 0) {
             setCurrentModuleId(data.modules[0].id);
           }
-          localStorage.setItem("professor_course_modules", JSON.stringify(data.modules));
+          try {
+            localStorage.setItem("professor_course_modules", JSON.stringify(data.modules));
+          } catch (err) {
+            console.warn("Storage quota exceeded, could not write to localStorage:", err);
+          }
         } else {
           loadFromLocalStorageFallback();
         }
@@ -127,7 +141,11 @@ export default function ProfessorModules() {
         }
       } else {
         setModules(DEFAULT_MODULES);
-        localStorage.setItem("professor_course_modules", JSON.stringify(DEFAULT_MODULES));
+        try {
+          localStorage.setItem("professor_course_modules", JSON.stringify(DEFAULT_MODULES));
+        } catch (err) {
+          console.warn("Storage quota exceeded, could not write to localStorage:", err);
+        }
         setCurrentModuleId(DEFAULT_MODULES[0]?.id || null);
       }
     };
@@ -152,7 +170,11 @@ export default function ProfessorModules() {
   // Helper to persist modules state
   const updateAndPersistModules = async (updated: Module[]) => {
     setModules(updated);
-    localStorage.setItem("professor_course_modules", JSON.stringify(updated));
+    try {
+      localStorage.setItem("professor_course_modules", JSON.stringify(updated));
+    } catch (err) {
+      console.warn("Storage quota exceeded, could not write to localStorage:", err);
+    }
     try {
       await fetch("/api/modules", {
         method: "POST",
@@ -704,6 +726,225 @@ export default function ProfessorModules() {
     updateAndPersistModules(updated);
   };
 
+  // --- Material Formatting & Editing Helpers ---
+  const insertFormatTag = (textareaId: string, tagStart: string, tagEnd: string, isEditing: boolean) => {
+    const textarea = document.getElementById(textareaId) as HTMLTextAreaElement;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = textarea.value;
+
+    const selectedText = text.substring(start, end);
+    const replacement = tagStart + selectedText + tagEnd;
+    const newContent = text.substring(0, start) + replacement + text.substring(end);
+
+    if (isEditing) {
+      setEditingMaterialContent(newContent);
+    } else {
+      setMatContent(newContent);
+    }
+
+    // Restore focus and selection
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + tagStart.length, start + tagStart.length + selectedText.length);
+    }, 0);
+  };
+
+  const renderFormattingToolbar = (textareaId: string, isEditing: boolean) => {
+    return (
+      <div className="flex flex-wrap items-center gap-1.5 p-2 bg-brand-bg/60 border border-brand-border/40 rounded-t-lg -mb-2 border-b-0 text-xs select-none">
+        <button
+          type="button"
+          onClick={() => insertFormatTag(textareaId, "<strong>", "</strong>", isEditing)}
+          className="p-1 px-2 rounded bg-brand-card hover:bg-brand-bg border border-brand-border/30 hover:border-brand-cyan/40 text-brand-text font-bold"
+          title="Bold"
+        >
+          B
+        </button>
+        <button
+          type="button"
+          onClick={() => insertFormatTag(textareaId, "<em>", "</em>", isEditing)}
+          className="p-1 px-2 rounded bg-brand-card hover:bg-brand-bg border border-brand-border/30 hover:border-brand-cyan/40 text-brand-text italic"
+          title="Italic"
+        >
+          I
+        </button>
+        <button
+          type="button"
+          onClick={() => insertFormatTag(textareaId, "<u>", "</u>", isEditing)}
+          className="p-1 px-2 rounded bg-brand-card hover:bg-brand-bg border border-brand-border/30 hover:border-brand-cyan/40 text-brand-text underline"
+          title="Underline"
+        >
+          U
+        </button>
+        <button
+          type="button"
+          onClick={() => insertFormatTag(textareaId, '<mark style="background-color: rgba(34, 211, 238, 0.25); color: #22d3ee; padding: 2px 4px; border-radius: 4px;">', "</mark>", isEditing)}
+          className="p-1 px-1.5 rounded bg-brand-card hover:bg-brand-bg border border-brand-border/30 hover:border-brand-cyan/40 text-brand-cyan font-semibold flex items-center gap-1"
+          title="Highlight"
+        >
+          <span className="text-[10px]">📝</span> Highlight
+        </button>
+        <button
+          type="button"
+          onClick={() => insertFormatTag(textareaId, '<code style="font-family: monospace; bg-black/40 border border-brand-border/60 px-1.5 py-0.5 rounded text-green-400 text-[11px]">', "</code>", isEditing)}
+          className="p-1 px-1.5 rounded bg-brand-card hover:bg-brand-bg border border-brand-border/30 hover:border-brand-cyan/40 text-green-400 font-mono text-[10px]"
+          title="Code"
+        >
+          &lt;/&gt;
+        </button>
+
+        <div className="w-[1px] h-4 bg-brand-border/40 mx-0.5"></div>
+
+        {/* Font Family Select Dropdown */}
+        <select
+          onChange={(e) => {
+            if (e.target.value) {
+              insertFormatTag(textareaId, `<span style="font-family: ${e.target.value};">`, "</span>", isEditing);
+              e.target.value = ""; // Reset
+            }
+          }}
+          className="bg-brand-card border border-brand-border/45 rounded p-1 text-[10px] text-brand-text focus:outline-none focus:border-brand-cyan/60"
+          defaultValue=""
+        >
+          <option value="" disabled>Font Family</option>
+          <option value="'Inter', sans-serif">Inter</option>
+          <option value="'Outfit', sans-serif">Outfit</option>
+          <option value="'Playfair Display', serif">Playfair Display</option>
+          <option value="'Roboto Mono', monospace">Roboto Mono</option>
+        </select>
+
+        {/* Font Size Select Dropdown */}
+        <select
+          onChange={(e) => {
+            if (e.target.value) {
+              insertFormatTag(textareaId, `<span style="font-size: ${e.target.value};">`, "</span>", isEditing);
+              e.target.value = ""; // Reset
+            }
+          }}
+          className="bg-brand-card border border-brand-border/45 rounded p-1 text-[10px] text-brand-text focus:outline-none focus:border-brand-cyan/60"
+          defaultValue=""
+        >
+          <option value="" disabled>Font Size</option>
+          <option value="11px">Small</option>
+          <option value="14px">Medium</option>
+          <option value="18px">Large</option>
+          <option value="24px">Extra Large</option>
+        </select>
+      </div>
+    );
+  };
+
+  const startEditMaterial = (topicId: number, subtopicId: number | undefined, mat: Material) => {
+    setEditingMaterialId(mat.id);
+    setEditingMaterialTitle(mat.title);
+    setEditingMaterialContent(mat.content);
+    setEditingMaterialTextStyle(mat.textStyle || "normal");
+    setEditingMaterialImageAlign(mat.imageAlign || "center");
+    setEditingMaterialFileName(mat.fileName || "");
+    setEditingMaterialFileSize(mat.fileSize || "");
+    setEditingMaterialType(mat.type);
+    
+    // Close addition form if open
+    setAddingMaterialTo(null);
+  };
+
+  const cancelEditMaterial = () => {
+    setEditingMaterialId(null);
+    setEditingMaterialTitle("");
+    setEditingMaterialContent("");
+    setEditingMaterialTextStyle("normal");
+    setEditingMaterialImageAlign("center");
+    setEditingMaterialFileName("");
+    setEditingMaterialFileSize("");
+  };
+
+  const saveEditMaterial = (moduleId: number, topicId: number, subtopicId?: number) => {
+    if (!editingMaterialId) return;
+
+    let finalTitle = editingMaterialTitle.trim();
+    if (!finalTitle) {
+      if (editingMaterialType === "text") finalTitle = "Reading Section";
+      else if (editingMaterialType === "video") finalTitle = "Watch Explanatory Video";
+      else if (editingMaterialType === "image") finalTitle = editingMaterialFileName || "Reference Image";
+      else if (editingMaterialType === "file") finalTitle = editingMaterialFileName || "Study Document";
+    }
+
+    const updated = modules.map(mod => {
+      if (mod.id !== moduleId) return mod;
+
+      return {
+        ...mod,
+        topics: mod.topics.map(t => {
+          if (t.id !== topicId) return t;
+
+          if (subtopicId !== undefined) {
+            return {
+              ...t,
+              subtopics: (t.subtopics || []).map(s => {
+                if (s.id !== subtopicId) return s;
+                return {
+                  ...s,
+                  materials: (s.materials || []).map(m => {
+                    if (m.id !== editingMaterialId) return m;
+                    return {
+                      ...m,
+                      title: finalTitle,
+                      content: editingMaterialContent.trim(),
+                      textStyle: editingMaterialTextStyle,
+                      imageAlign: editingMaterialImageAlign,
+                      fileName: editingMaterialFileName || undefined,
+                      fileSize: editingMaterialFileSize || undefined
+                    };
+                  })
+                };
+              })
+            };
+          } else {
+            return {
+              ...t,
+              materials: (t.materials || []).map(m => {
+                if (m.id !== editingMaterialId) return m;
+                return {
+                  ...m,
+                  title: finalTitle,
+                  content: editingMaterialContent.trim(),
+                  textStyle: editingMaterialTextStyle,
+                  imageAlign: editingMaterialImageAlign,
+                  fileName: editingMaterialFileName || undefined,
+                  fileSize: editingMaterialFileSize || undefined
+                };
+              })
+            };
+          }
+        })
+      };
+    });
+
+    updateAndPersistModules(updated);
+    cancelEditMaterial();
+  };
+
+  const handleEditMaterialFileUpload = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    type: "image" | "file"
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setEditingMaterialFileName(file.name);
+    const sizeStr = (file.size / (1024 * 1024)).toFixed(2) + " MB";
+    setEditingMaterialFileSize(sizeStr);
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setEditingMaterialContent(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
   // Toggle topic expanded state
   const toggleTopicExpand = (topicId: number) => {
     setExpandedTopics(prev => ({
@@ -1231,12 +1472,16 @@ export default function ProfessorModules() {
                                             />
 
                                             {addingMaterialTo.materialType === "text" && (
-                                              <textarea
-                                                value={matContent}
-                                                onChange={(e) => setMatContent(e.target.value)}
-                                                placeholder="Write your study text here..."
-                                                className="bg-brand-bg border border-brand-border rounded-lg p-2 text-xs text-brand-text focus:outline-none focus:border-brand-cyan/70 placeholder-brand-muted/50 h-28 resize-y"
-                                              />
+                                              <div className="flex flex-col">
+                                                {renderFormattingToolbar(`mat-textarea-new-${topic.id}`, false)}
+                                                <textarea
+                                                  id={`mat-textarea-new-${topic.id}`}
+                                                  value={matContent}
+                                                  onChange={(e) => setMatContent(e.target.value)}
+                                                  placeholder="Write your study text here..."
+                                                  className="bg-brand-bg border border-brand-border rounded-b-lg p-2 text-xs text-brand-text focus:outline-none focus:border-brand-cyan/70 placeholder-brand-muted/50 h-28 resize-y"
+                                                />
+                                              </div>
                                             )}
 
                                             {addingMaterialTo.materialType === "video" && (
@@ -1291,111 +1536,199 @@ export default function ProfessorModules() {
                                         ) : (
                                           <div className="flex flex-col gap-2">
                                             {(topic.materials || []).map((mat, matIdx) => (
-                                              <div
-                                                key={mat.id}
-                                                className="flex flex-col gap-2 bg-brand-card/40 border border-brand-border/30 rounded-lg p-3 hover:border-brand-border transition-colors animate-fadeIn"
-                                              >
-                                                <div className="flex items-center justify-between w-full">
-                                                  <div className="flex items-center gap-2.5 truncate mr-4">
-                                                    {/* Material Type Icon */}
-                                                    {mat.type === "text" && (
-                                                      <span className="text-brand-cyan" title="Reading Sheet">
-                                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
-                                                      </span>
-                                                    )}
-                                                    {mat.type === "video" && (
-                                                      <span className="text-brand-cyan" title="Video Resource">
-                                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-                                                      </span>
-                                                    )}
-                                                    {mat.type === "image" && (
-                                                      <span className="text-brand-cyan" title="Image Reference">
-                                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                                                      </span>
-                                                    )}
-                                                    {mat.type === "file" && (
-                                                      <span className="text-brand-cyan" title="Document File">
-                                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
-                                                      </span>
-                                                    )}
-
-                                                    <div className="flex flex-col truncate">
-                                                      <span className="text-xs font-semibold text-brand-text truncate">
-                                                        {mat.title}
-                                                      </span>
-                                                      <span className="text-[9px] text-brand-muted truncate">
-                                                        {mat.fileName ? `${mat.fileName} (${mat.fileSize})` : mat.content}
-                                                      </span>
-                                                    </div>
-                                                  </div>
-
-                                                  <div className="flex items-center gap-1.5 shrink-0">
-                                                    {/* Reordering */}
-                                                    <div className="flex items-center bg-brand-bg rounded p-0.5 border border-brand-border/40">
-                                                      <button
-                                                        disabled={matIdx === 0}
-                                                        onClick={() => moveMaterial(selectedModule.id, topic.id, undefined, matIdx, "up")}
-                                                        className="p-0.5 text-brand-muted hover:text-brand-cyan disabled:opacity-10 transition-colors"
-                                                      >
-                                                        <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m18 15-6-6-6 6"/></svg>
-                                                      </button>
-                                                      <button
-                                                        disabled={matIdx === (topic.materials || []).length - 1}
-                                                        onClick={() => moveMaterial(selectedModule.id, topic.id, undefined, matIdx, "down")}
-                                                        className="p-0.5 text-brand-muted hover:text-brand-cyan disabled:opacity-10 transition-colors"
-                                                      >
-                                                        <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-                                                      </button>
-                                                    </div>
-
+                                              editingMaterialId === mat.id ? (
+                                                <div key={mat.id} className="bg-brand-card border border-brand-cyan/30 rounded-xl p-4 mb-2 flex flex-col gap-3 shadow-md" onClick={(e) => e.stopPropagation()}>
+                                                  <div className="flex justify-between items-center">
+                                                    <span className="text-[10px] font-bold text-brand-cyan uppercase tracking-wider">
+                                                      Edit {editingMaterialType} Content
+                                                    </span>
                                                     <button
-                                                      onClick={() => deleteMaterial(selectedModule.id, topic.id, undefined, mat.id)}
-                                                      className="text-brand-muted hover:text-red-400 p-0.5"
+                                                      onClick={cancelEditMaterial}
+                                                      className="text-[10px] text-brand-muted hover:text-red-400 font-semibold"
                                                     >
-                                                      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                                                      Cancel
                                                     </button>
                                                   </div>
+                                                  
+                                                  <input
+                                                    value={editingMaterialTitle}
+                                                    onChange={(e) => setEditingMaterialTitle(e.target.value)}
+                                                    placeholder="Material Title"
+                                                    className="bg-brand-bg border border-brand-border rounded-lg p-2 text-xs text-brand-text focus:outline-none focus:border-brand-cyan/70 placeholder-brand-muted/50"
+                                                  />
+
+                                                  {editingMaterialType === "text" && (
+                                                    <div className="flex flex-col">
+                                                      {renderFormattingToolbar(`mat-textarea-edit-${mat.id}`, true)}
+                                                      <textarea
+                                                        id={`mat-textarea-edit-${mat.id}`}
+                                                        value={editingMaterialContent}
+                                                        onChange={(e) => setEditingMaterialContent(e.target.value)}
+                                                        placeholder="Write your study text here..."
+                                                        className="bg-brand-bg border border-brand-border rounded-b-lg p-2 text-xs text-brand-text focus:outline-none focus:border-brand-cyan/70 placeholder-brand-muted/50 h-28 resize-y"
+                                                      />
+                                                    </div>
+                                                  )}
+
+                                                  {editingMaterialType === "video" && (
+                                                    <input
+                                                      value={editingMaterialContent}
+                                                      onChange={(e) => setEditingMaterialContent(e.target.value)}
+                                                      placeholder="Paste Video URL"
+                                                      className="bg-brand-bg border border-brand-border rounded-lg p-2 text-xs text-brand-text focus:outline-none focus:border-brand-cyan/70 placeholder-brand-muted/50"
+                                                    />
+                                                  )}
+
+                                                  {(editingMaterialType === "image" || editingMaterialType === "file") && (
+                                                    <div className="flex items-center gap-3">
+                                                      <label className="text-xs font-bold text-brand-bg bg-brand-cyan hover:bg-brand-cyan-hover px-3 py-1.5 rounded-lg cursor-pointer transition-colors flex items-center gap-1">
+                                                        <span>Upload New File</span>
+                                                        <input
+                                                          type="file"
+                                                          className="hidden"
+                                                          accept={editingMaterialType === "image" ? "image/*" : "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
+                                                          onChange={(e) => handleEditMaterialFileUpload(e, editingMaterialType as 'image' | 'file')}
+                                                        />
+                                                      </label>
+                                                      {editingMaterialFileName ? (
+                                                        <span className="text-[10px] text-brand-text truncate">
+                                                          {editingMaterialFileName} ({editingMaterialFileSize})
+                                                        </span>
+                                                      ) : (
+                                                        <span className="text-[10px] text-brand-muted font-mono max-w-[200px] truncate">
+                                                          {editingMaterialContent.startsWith("data:") ? "Existing base64 resource" : editingMaterialContent}
+                                                        </span>
+                                                      )}
+                                                    </div>
+                                                  )}
+
+                                                  <button
+                                                    onClick={() => saveEditMaterial(selectedModule.id, topic.id)}
+                                                    disabled={
+                                                      (editingMaterialType === "text" && !editingMaterialContent.trim()) ||
+                                                      (editingMaterialType === "video" && !editingMaterialContent.trim()) ||
+                                                      ((editingMaterialType === "image" || editingMaterialType === "file") && !editingMaterialContent)
+                                                    }
+                                                    className="bg-brand-cyan hover:bg-brand-cyan-hover disabled:opacity-40 text-brand-bg text-xs font-bold py-2 rounded-lg transition-colors"
+                                                  >
+                                                    Save Changes
+                                                  </button>
                                                 </div>
+                                              ) : (
+                                                <div
+                                                  key={mat.id}
+                                                  className="flex flex-col gap-2 bg-brand-card/40 border border-brand-border/30 rounded-lg p-3 hover:border-brand-border transition-colors animate-fadeIn"
+                                                >
+                                                  <div className="flex items-center justify-between w-full">
+                                                    <div className="flex items-center gap-2.5 truncate mr-4">
+                                                      {/* Material Type Icon */}
+                                                      {mat.type === "text" && (
+                                                        <span className="text-brand-cyan" title="Reading Sheet">
+                                                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
+                                                        </span>
+                                                      )}
+                                                      {mat.type === "video" && (
+                                                        <span className="text-brand-cyan" title="Video Resource">
+                                                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+                                                        </span>
+                                                      )}
+                                                      {mat.type === "image" && (
+                                                        <span className="text-brand-cyan" title="Image Reference">
+                                                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                                                        </span>
+                                                      )}
+                                                      {mat.type === "file" && (
+                                                        <span className="text-brand-cyan" title="Document File">
+                                                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
+                                                        </span>
+                                                      )}
 
-                                                {/* Style / Position adjustments */}
-                                                {mat.type === "text" && (
-                                                  <div className="flex items-center gap-1.5 mt-1 border-t border-brand-border/10 pt-2 flex-wrap" onClick={(e) => e.stopPropagation()}>
-                                                    <span className="text-[9px] text-brand-muted font-bold uppercase tracking-wider">Style:</span>
-                                                    {(["normal", "bold", "italic", "heading", "quote", "code"] as const).map((style) => (
-                                                      <button
-                                                        key={style}
-                                                        onClick={() => updateMaterialTextStyle(selectedModule.id, topic.id, undefined, mat.id, style)}
-                                                        className={`px-2 py-0.5 rounded-md text-[9px] capitalize border transition-all ${
-                                                          (mat.textStyle || "normal") === style
-                                                            ? "bg-brand-cyan/25 border-brand-cyan text-brand-cyan font-bold shadow-sm shadow-brand-cyan/10"
-                                                            : "bg-brand-bg/50 border-brand-border/40 text-brand-muted hover:text-brand-text hover:border-brand-border"
-                                                        }`}
-                                                      >
-                                                        {style}
-                                                      </button>
-                                                    ))}
-                                                  </div>
-                                                )}
+                                                      <div className="flex flex-col truncate">
+                                                        <span className="text-xs font-semibold text-brand-text truncate">
+                                                          {mat.title}
+                                                        </span>
+                                                        <span className="text-[9px] text-brand-muted truncate">
+                                                          {mat.fileName ? `${mat.fileName} (${mat.fileSize})` : mat.content}
+                                                        </span>
+                                                      </div>
+                                                    </div>
 
-                                                {mat.type === "image" && (
-                                                  <div className="flex items-center gap-1.5 mt-1 border-t border-brand-border/10 pt-2 flex-wrap" onClick={(e) => e.stopPropagation()}>
-                                                    <span className="text-[9px] text-brand-muted font-bold uppercase tracking-wider">Align:</span>
-                                                    {(["left", "center", "right"] as const).map((align) => (
+                                                    <div className="flex items-center gap-1.5 shrink-0">
+                                                      {/* Reordering */}
+                                                      <div className="flex items-center bg-brand-bg rounded p-0.5 border border-brand-border/40">
+                                                        <button
+                                                          disabled={matIdx === 0}
+                                                          onClick={() => moveMaterial(selectedModule.id, topic.id, undefined, matIdx, "up")}
+                                                          className="p-0.5 text-brand-muted hover:text-brand-cyan disabled:opacity-10 transition-colors"
+                                                        >
+                                                          <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+                                                        </button>
+                                                        <button
+                                                          disabled={matIdx === (topic.materials || []).length - 1}
+                                                          onClick={() => moveMaterial(selectedModule.id, topic.id, undefined, matIdx, "down")}
+                                                          className="p-0.5 text-brand-muted hover:text-brand-cyan disabled:opacity-10 transition-colors"
+                                                        >
+                                                          <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                                                        </button>
+                                                      </div>
+
                                                       <button
-                                                        key={align}
-                                                        onClick={() => updateMaterialImageAlign(selectedModule.id, topic.id, undefined, mat.id, align)}
-                                                        className={`px-2 py-0.5 rounded-md text-[9px] capitalize border transition-all ${
-                                                          (mat.imageAlign || "center") === align
-                                                            ? "bg-brand-cyan/25 border-brand-cyan text-brand-cyan font-bold shadow-sm shadow-brand-cyan/10"
-                                                            : "bg-brand-bg/50 border-brand-border/40 text-brand-muted hover:text-brand-text hover:border-brand-border"
-                                                        }`}
+                                                        onClick={() => startEditMaterial(topic.id, undefined, mat)}
+                                                        className="text-brand-muted hover:text-brand-cyan p-0.5"
+                                                        title="Edit Material"
                                                       >
-                                                        {align}
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
                                                       </button>
-                                                    ))}
+
+                                                      <button
+                                                        onClick={() => deleteMaterial(selectedModule.id, topic.id, undefined, mat.id)}
+                                                        className="text-brand-muted hover:text-red-400 p-0.5"
+                                                      >
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                                                      </button>
+                                                    </div>
                                                   </div>
-                                                )}
-                                              </div>
+
+                                                  {/* Style / Position adjustments */}
+                                                  {mat.type === "text" && (
+                                                    <div className="flex items-center gap-1.5 mt-1 border-t border-brand-border/10 pt-2 flex-wrap" onClick={(e) => e.stopPropagation()}>
+                                                      <span className="text-[9px] text-brand-muted font-bold uppercase tracking-wider">Style:</span>
+                                                      {(["normal", "bold", "italic", "heading", "quote", "code"] as const).map((style) => (
+                                                        <button
+                                                          key={style}
+                                                          onClick={() => updateMaterialTextStyle(selectedModule.id, topic.id, undefined, mat.id, style)}
+                                                          className={`px-2 py-0.5 rounded-md text-[9px] capitalize border transition-all ${
+                                                            (mat.textStyle || "normal") === style
+                                                              ? "bg-brand-cyan/25 border-brand-cyan text-brand-cyan font-bold shadow-sm shadow-brand-cyan/10"
+                                                              : "bg-brand-bg/50 border-brand-border/40 text-brand-muted hover:text-brand-text hover:border-brand-border"
+                                                          }`}
+                                                        >
+                                                          {style}
+                                                        </button>
+                                                      ))}
+                                                    </div>
+                                                  )}
+
+                                                  {mat.type === "image" && (
+                                                    <div className="flex items-center gap-1.5 mt-1 border-t border-brand-border/10 pt-2 flex-wrap" onClick={(e) => e.stopPropagation()}>
+                                                      <span className="text-[9px] text-brand-muted font-bold uppercase tracking-wider">Align:</span>
+                                                      {(["left", "center", "right"] as const).map((align) => (
+                                                        <button
+                                                          key={align}
+                                                          onClick={() => updateMaterialImageAlign(selectedModule.id, topic.id, undefined, mat.id, align)}
+                                                          className={`px-2 py-0.5 rounded-md text-[9px] capitalize border transition-all ${
+                                                            (mat.imageAlign || "center") === align
+                                                              ? "bg-brand-cyan/25 border-brand-cyan text-brand-cyan font-bold shadow-sm shadow-brand-cyan/10"
+                                                              : "bg-brand-bg/50 border-brand-border/40 text-brand-muted hover:text-brand-text hover:border-brand-border"
+                                                          }`}
+                                                        >
+                                                          {align}
+                                                        </button>
+                                                      ))}
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              )
                                             ))}
                                           </div>
                                         )}
@@ -1569,12 +1902,16 @@ export default function ProfessorModules() {
                                                   />
 
                                                   {addingMaterialTo.materialType === "text" && (
-                                                    <textarea
-                                                      value={matContent}
-                                                      onChange={(e) => setMatContent(e.target.value)}
-                                                      placeholder="Write reading description..."
-                                                      className="bg-brand-bg border border-brand-border rounded-lg p-2 text-[11px] text-brand-text focus:outline-none focus:border-brand-cyan/70 placeholder-brand-muted/50 h-20 resize-y"
-                                                    />
+                                                    <div className="flex flex-col">
+                                                      {renderFormattingToolbar(`mat-textarea-new-sub-${sub.id}`, false)}
+                                                      <textarea
+                                                        id={`mat-textarea-new-sub-${sub.id}`}
+                                                        value={matContent}
+                                                        onChange={(e) => setMatContent(e.target.value)}
+                                                        placeholder="Write reading description..."
+                                                        className="bg-brand-bg border border-brand-border rounded-b-lg p-2 text-[11px] text-brand-text focus:outline-none focus:border-brand-cyan/70 placeholder-brand-muted/50 h-20 resize-y"
+                                                      />
+                                                    </div>
                                                   )}
 
                                                   {addingMaterialTo.materialType === "video" && (
@@ -1629,82 +1966,170 @@ export default function ProfessorModules() {
                                               ) : (
                                                 <div className="flex flex-col gap-1.5 mt-1">
                                                   {(sub.materials || []).map((mat, matIdx) => (
-                                                    <div
-                                                      key={mat.id}
-                                                      className="flex flex-col gap-1.5 bg-brand-bg/20 border border-brand-border/20 rounded p-2 hover:border-brand-border/40"
-                                                    >
-                                                      <div className="flex items-center justify-between w-full">
-                                                        <span className="text-[11px] font-medium text-brand-text truncate mr-3">
-                                                          {mat.title} <span className="text-[9px] text-brand-muted font-normal font-mono">({mat.type})</span>
-                                                        </span>
-
-                                                        <div className="flex items-center gap-1 shrink-0">
-                                                          {/* Reordering */}
-                                                          <div className="flex items-center bg-brand-bg rounded p-0.5 border border-brand-border/40">
-                                                            <button
-                                                              disabled={matIdx === 0}
-                                                              onClick={() => moveMaterial(selectedModule.id, topic.id, sub.id, matIdx, "up")}
-                                                              className="p-0.5 text-brand-muted hover:text-brand-cyan disabled:opacity-10"
-                                                            >
-                                                              <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m18 15-6-6-6 6"/></svg>
-                                                            </button>
-                                                            <button
-                                                              disabled={matIdx === (sub.materials || []).length - 1}
-                                                              onClick={() => moveMaterial(selectedModule.id, topic.id, sub.id, matIdx, "down")}
-                                                              className="p-0.5 text-brand-muted hover:text-brand-cyan disabled:opacity-10"
-                                                            >
-                                                              <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-                                                            </button>
-                                                          </div>
-
+                                                    editingMaterialId === mat.id ? (
+                                                      <div key={mat.id} className="bg-brand-card border border-brand-cyan/30 rounded-xl p-3.5 mb-3 flex flex-col gap-2.5 shadow-md">
+                                                        <div className="flex justify-between items-center">
+                                                          <span className="text-[9px] font-bold text-brand-cyan uppercase tracking-wider">
+                                                            Edit {editingMaterialType} Material
+                                                          </span>
                                                           <button
-                                                            onClick={() => deleteMaterial(selectedModule.id, topic.id, sub.id, mat.id)}
-                                                            className="text-brand-muted hover:text-red-400 p-0.5"
+                                                            onClick={cancelEditMaterial}
+                                                            className="text-[9px] text-brand-muted hover:text-red-400 font-semibold"
                                                           >
-                                                            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                                                            Cancel
                                                           </button>
                                                         </div>
+                                                        
+                                                        <input
+                                                          value={editingMaterialTitle}
+                                                          onChange={(e) => setEditingMaterialTitle(e.target.value)}
+                                                          placeholder="Material Title"
+                                                          className="bg-brand-bg border border-brand-border rounded-lg p-2 text-[11px] text-brand-text focus:outline-none focus:border-brand-cyan/70 placeholder-brand-muted/50"
+                                                        />
+
+                                                        {editingMaterialType === "text" && (
+                                                          <div className="flex flex-col">
+                                                            {renderFormattingToolbar(`mat-textarea-edit-sub-${mat.id}`, true)}
+                                                            <textarea
+                                                              id={`mat-textarea-edit-sub-${mat.id}`}
+                                                              value={editingMaterialContent}
+                                                              onChange={(e) => setEditingMaterialContent(e.target.value)}
+                                                              placeholder="Write reading description..."
+                                                              className="bg-brand-bg border border-brand-border rounded-b-lg p-2 text-[11px] text-brand-text focus:outline-none focus:border-brand-cyan/70 placeholder-brand-muted/50 h-20 resize-y"
+                                                            />
+                                                          </div>
+                                                        )}
+
+                                                        {editingMaterialType === "video" && (
+                                                          <input
+                                                            value={editingMaterialContent}
+                                                            onChange={(e) => setEditingMaterialContent(e.target.value)}
+                                                            placeholder="Paste YouTube Video Link..."
+                                                            className="bg-brand-bg border border-brand-border rounded-lg p-2 text-[11px] text-brand-text focus:outline-none focus:border-brand-cyan/70 placeholder-brand-muted/50"
+                                                          />
+                                                        )}
+
+                                                        {(editingMaterialType === "image" || editingMaterialType === "file") && (
+                                                          <div className="flex items-center gap-2">
+                                                            <label className="text-[10px] font-bold text-brand-bg bg-brand-cyan hover:bg-brand-cyan-hover px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors flex items-center gap-1 whitespace-nowrap">
+                                                              <span>Upload New File</span>
+                                                              <input
+                                                                type="file"
+                                                                className="hidden"
+                                                                accept={editingMaterialType === "image" ? "image/*" : "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
+                                                                onChange={(e) => handleEditMaterialFileUpload(e, editingMaterialType as 'image' | 'file')}
+                                                              />
+                                                            </label>
+                                                            {editingMaterialFileName ? (
+                                                              <span className="text-[9px] text-brand-text truncate max-w-[140px]">
+                                                                {editingMaterialFileName}
+                                                              </span>
+                                                            ) : (
+                                                              <span className="text-[9px] text-brand-muted truncate max-w-[140px]">
+                                                                {editingMaterialContent.startsWith("data:") ? "Existing base64" : editingMaterialContent}
+                                                              </span>
+                                                            )}
+                                                          </div>
+                                                        )}
+
+                                                        <button
+                                                          onClick={() => saveEditMaterial(selectedModule.id, topic.id, sub.id)}
+                                                          disabled={
+                                                            (editingMaterialType === "text" && !editingMaterialContent.trim()) ||
+                                                            (editingMaterialType === "video" && !editingMaterialContent.trim()) ||
+                                                            ((editingMaterialType === "image" || editingMaterialType === "file") && !editingMaterialContent)
+                                                          }
+                                                          className="bg-brand-cyan hover:bg-brand-cyan-hover disabled:opacity-40 text-brand-bg text-[10px] font-bold py-1.5 rounded-lg transition-colors"
+                                                        >
+                                                          Save Changes
+                                                        </button>
                                                       </div>
+                                                    ) : (
+                                                      <div
+                                                        key={mat.id}
+                                                        className="flex flex-col gap-1.5 bg-brand-bg/20 border border-brand-border/20 rounded p-2 hover:border-brand-border/40"
+                                                      >
+                                                        <div className="flex items-center justify-between w-full">
+                                                          <span className="text-[11px] font-medium text-brand-text truncate mr-3">
+                                                            {mat.title} <span className="text-[9px] text-brand-muted font-normal font-mono">({mat.type})</span>
+                                                          </span>
 
-                                                      {/* Style / Position adjustments */}
-                                                      {mat.type === "text" && (
-                                                        <div className="flex items-center gap-1.5 border-t border-brand-border/10 pt-1.5 flex-wrap" onClick={(e) => e.stopPropagation()}>
-                                                          <span className="text-[8px] text-brand-muted font-bold uppercase tracking-wider">Style:</span>
-                                                          {(["normal", "bold", "italic", "heading", "quote", "code"] as const).map((style) => (
-                                                            <button
-                                                              key={style}
-                                                              onClick={() => updateMaterialTextStyle(selectedModule.id, topic.id, sub.id, mat.id, style)}
-                                                              className={`px-1 py-0.5 rounded text-[8px] capitalize border transition-all ${
-                                                                (mat.textStyle || "normal") === style
-                                                                  ? "bg-brand-cyan/20 border-brand-cyan text-brand-cyan font-bold"
-                                                                  : "bg-brand-bg/50 border-brand-border/40 text-brand-muted hover:text-brand-text hover:border-brand-border"
-                                                              }`}
-                                                            >
-                                                              {style}
-                                                            </button>
-                                                          ))}
-                                                        </div>
-                                                      )}
+                                                          <div className="flex items-center gap-1 shrink-0">
+                                                            {/* Reordering */}
+                                                            <div className="flex items-center bg-brand-bg rounded p-0.5 border border-brand-border/40">
+                                                              <button
+                                                                disabled={matIdx === 0}
+                                                                onClick={() => moveMaterial(selectedModule.id, topic.id, sub.id, matIdx, "up")}
+                                                                className="p-0.5 text-brand-muted hover:text-brand-cyan disabled:opacity-10"
+                                                              >
+                                                                <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+                                                              </button>
+                                                              <button
+                                                                disabled={matIdx === (sub.materials || []).length - 1}
+                                                                onClick={() => moveMaterial(selectedModule.id, topic.id, sub.id, matIdx, "down")}
+                                                                className="p-0.5 text-brand-muted hover:text-brand-cyan disabled:opacity-10"
+                                                              >
+                                                                <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                                                              </button>
+                                                            </div>
 
-                                                      {mat.type === "image" && (
-                                                        <div className="flex items-center gap-1.5 border-t border-brand-border/10 pt-1.5 flex-wrap" onClick={(e) => e.stopPropagation()}>
-                                                          <span className="text-[8px] text-brand-muted font-bold uppercase tracking-wider">Align:</span>
-                                                          {(["left", "center", "right"] as const).map((align) => (
                                                             <button
-                                                              key={align}
-                                                              onClick={() => updateMaterialImageAlign(selectedModule.id, topic.id, sub.id, mat.id, align)}
-                                                              className={`px-1 py-0.5 rounded text-[8px] capitalize border transition-all ${
-                                                                (mat.imageAlign || "center") === align
-                                                                  ? "bg-brand-cyan/20 border-brand-cyan text-brand-cyan font-bold"
-                                                                  : "bg-brand-bg/50 border-brand-border/40 text-brand-muted hover:text-brand-text hover:border-brand-border"
-                                                              }`}
+                                                              onClick={() => startEditMaterial(topic.id, sub.id, mat)}
+                                                              className="text-brand-muted hover:text-brand-cyan p-0.5"
+                                                              title="Edit Material"
                                                             >
-                                                              {align}
+                                                              <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
                                                             </button>
-                                                          ))}
+
+                                                            <button
+                                                              onClick={() => deleteMaterial(selectedModule.id, topic.id, sub.id, mat.id)}
+                                                              className="text-brand-muted hover:text-red-400 p-0.5"
+                                                            >
+                                                              <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                                                            </button>
+                                                          </div>
                                                         </div>
-                                                      )}
-                                                    </div>
+
+                                                        {/* Style / Position adjustments */}
+                                                        {mat.type === "text" && (
+                                                          <div className="flex items-center gap-1.5 border-t border-brand-border/10 pt-1.5 flex-wrap" onClick={(e) => e.stopPropagation()}>
+                                                            <span className="text-[8px] text-brand-muted font-bold uppercase tracking-wider">Style:</span>
+                                                            {(["normal", "bold", "italic", "heading", "quote", "code"] as const).map((style) => (
+                                                              <button
+                                                                key={style}
+                                                                onClick={() => updateMaterialTextStyle(selectedModule.id, topic.id, sub.id, mat.id, style)}
+                                                                className={`px-1 py-0.5 rounded text-[8px] capitalize border transition-all ${
+                                                                  (mat.textStyle || "normal") === style
+                                                                    ? "bg-brand-cyan/20 border-brand-cyan text-brand-cyan font-bold"
+                                                                    : "bg-brand-bg/50 border-brand-border/40 text-brand-muted hover:text-brand-text hover:border-brand-border"
+                                                                }`}
+                                                              >
+                                                                {style}
+                                                              </button>
+                                                            ))}
+                                                          </div>
+                                                        )}
+
+                                                        {mat.type === "image" && (
+                                                          <div className="flex items-center gap-1.5 border-t border-brand-border/10 pt-1.5 flex-wrap" onClick={(e) => e.stopPropagation()}>
+                                                            <span className="text-[8px] text-brand-muted font-bold uppercase tracking-wider">Align:</span>
+                                                            {(["left", "center", "right"] as const).map((align) => (
+                                                              <button
+                                                                key={align}
+                                                                onClick={() => updateMaterialImageAlign(selectedModule.id, topic.id, sub.id, mat.id, align)}
+                                                                className={`px-1 py-0.5 rounded text-[8px] capitalize border transition-all ${
+                                                                  (mat.imageAlign || "center") === align
+                                                                    ? "bg-brand-cyan/20 border-brand-cyan text-brand-cyan font-bold"
+                                                                    : "bg-brand-bg/50 border-brand-border/40 text-brand-muted hover:text-brand-text hover:border-brand-border"
+                                                                }`}
+                                                              >
+                                                                {align}
+                                                              </button>
+                                                            ))}
+                                                          </div>
+                                                        )}
+                                                      </div>
+                                                    )
                                                   ))}
                                                 </div>
                                               )}
@@ -1854,16 +2279,17 @@ export default function ProfessorModules() {
 
                                         {/* TEXT */}
                                         {mat.type === "text" && (
-                                          <div className={`whitespace-pre-wrap text-[11px] leading-relaxed bg-brand-bg/40 p-3.5 border border-brand-border/30 rounded-xl ${
-                                            mat.textStyle === "bold" ? "font-bold text-brand-text" :
-                                            mat.textStyle === "italic" ? "italic text-brand-text/90" :
-                                            mat.textStyle === "heading" ? "text-xs font-extrabold text-brand-cyan border-l-2 border-brand-cyan pl-2 py-0.5" :
-                                            mat.textStyle === "quote" ? "border-l-4 border-brand-border/60 pl-3 italic text-brand-muted bg-brand-bg/25" :
-                                            mat.textStyle === "code" ? "font-mono bg-black/40 border border-brand-border/40 px-2.5 py-1.5 rounded-lg text-green-400 text-[10px]" :
-                                            "text-brand-text/90"
-                                          }`}>
-                                            {mat.content}
-                                          </div>
+                                          <div
+                                            className={`whitespace-pre-wrap text-[11px] leading-relaxed bg-brand-bg/40 p-3.5 border border-brand-border/30 rounded-xl ${
+                                              mat.textStyle === "bold" ? "font-bold text-brand-text" :
+                                              mat.textStyle === "italic" ? "italic text-brand-text/90" :
+                                              mat.textStyle === "heading" ? "text-xs font-extrabold text-brand-cyan border-l-2 border-brand-cyan pl-2 py-0.5" :
+                                              mat.textStyle === "quote" ? "border-l-4 border-brand-border/60 pl-3 italic text-brand-muted bg-brand-bg/25" :
+                                              mat.textStyle === "code" ? "font-mono bg-black/40 border border-brand-border/40 px-2.5 py-1.5 rounded-lg text-green-400 text-[10px]" :
+                                              "text-brand-text/90"
+                                            }`}
+                                            dangerouslySetInnerHTML={{ __html: mat.content }}
+                                          />
                                         )}
 
                                         {/* VIDEO */}

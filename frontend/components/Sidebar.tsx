@@ -182,12 +182,7 @@ export default function Sidebar({ activePath }: { activePath: string }) {
             </Link>
           );
         })}
-        <div className="pt-4">
-          <button className="w-full flex items-center justify-center gap-2 py-2.5 bg-brand-card hover:bg-brand-border text-brand-text font-medium text-xs rounded border border-brand-border transition-colors">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
-            New Module
-          </button>
-        </div>
+
       </nav>
 
       <div className="p-4 border-t border-brand-border/30 space-y-2">

@@ -16,23 +16,40 @@ export default function ProfessorDashboard() {
   const [error, setError] = useState("");
   const [profilePic, setProfilePic] = useState<string | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
+  const [activeStudentsCount, setActiveStudentsCount] = useState(0);
+  const [modules, setModules] = useState<any[]>([]);
+  const [pendingStudents, setPendingStudents] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const fetchPendingCount = async () => {
+    const fetchData = async () => {
       try {
-        const res = await fetch("/api/users");
-        const data = await res.json();
-        if (data.success) {
-          const pending = data.users.filter(
-            (u: { role: string; status?: string }) => u.role === "Student" && (u.status === "pending" || !u.status)
+        const usersRes = await fetch("/api/users");
+        const usersData = await usersRes.json();
+        if (usersData.success && usersData.users) {
+          const admitted = usersData.users.filter(
+            (u: any) => u.role === "Student" && u.status === "admitted"
           );
+          const pending = usersData.users.filter(
+            (u: any) => u.role === "Student" && (u.status === "pending" || !u.status)
+          );
+          setActiveStudentsCount(admitted.length);
           setPendingCount(pending.length);
+          setPendingStudents(pending);
+        }
+
+        const modulesRes = await fetch("/api/modules");
+        const modulesData = await modulesRes.json();
+        if (modulesData.success && modulesData.modules) {
+          setModules(modulesData.modules);
         }
       } catch (e) {
         console.error(e);
+      } finally {
+        setIsLoading(false);
       }
     };
-    fetchPendingCount();
+    fetchData();
   }, []);
 
   useEffect(() => {
@@ -186,162 +203,157 @@ export default function ProfessorDashboard() {
           </div>
         )}
 
-        <div className="grid grid-cols-3 gap-6 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           {/* Active Students */}
           <div className="bg-brand-card border border-brand-border rounded-xl p-6 shadow-md">
             <div className="flex justify-between items-start mb-6">
               <div className="text-[10px] font-bold uppercase tracking-wider text-brand-text">Active Students</div>
               <div className="w-6 h-6 rounded bg-brand-cyan/20 text-brand-cyan flex items-center justify-center">
-                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
               </div>
             </div>
-            <div className="text-4xl font-bold mb-2">142</div>
-            <div className="text-xs text-green-500 font-medium flex items-center gap-1">
-              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>
-              +5% this week
-            </div>
+            <div className="text-4xl font-bold mb-2">{activeStudentsCount}</div>
+            <div className="text-xs text-brand-muted font-medium">Validated and admitted students</div>
           </div>
 
-          {/* Pending Lab Reviews */}
+          {/* Pending Admissions */}
           <div className="bg-brand-card border border-brand-border rounded-xl p-6 shadow-md">
             <div className="flex justify-between items-start mb-6">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-brand-text">Pending Lab Reviews</div>
-              <div className="w-6 h-6 rounded bg-red-500/20 text-red-500 flex items-center justify-center">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-brand-text">Pending Admissions</div>
+              <div className="w-6 h-6 rounded bg-yellow-500/20 text-yellow-500 flex items-center justify-center">
                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
               </div>
             </div>
-            <div className="text-4xl font-bold mb-2">28</div>
-            <div className="text-xs text-red-500 font-medium flex items-center gap-1">
-              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-              Requires attention
-            </div>
+            <div className="text-4xl font-bold mb-2">{pendingCount}</div>
+            <div className="text-xs text-yellow-500 font-medium">Requires enrollment check</div>
           </div>
 
-          {/* Avg Cohort Grade */}
+          {/* Active Modules Count */}
           <div className="bg-brand-card border border-brand-border rounded-xl p-6 shadow-md">
             <div className="flex justify-between items-start mb-6">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-brand-text">Avg. Cohort Grade</div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-brand-text">Active Course Modules</div>
               <div className="w-6 h-6 rounded bg-green-500/20 text-green-500 flex items-center justify-center">
-                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/></svg>
               </div>
             </div>
-            <div className="text-3xl font-bold mb-4">87.4%</div>
-            <div className="w-full bg-brand-bg h-1.5 rounded-full overflow-hidden">
-               <div className="w-[87%] h-full bg-brand-cyan"></div>
-            </div>
+            <div className="text-4xl font-bold mb-2">{modules.length}</div>
+            <div className="text-xs text-brand-muted font-medium">Syllabus modules configured</div>
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-6">
-           <div className="col-span-2 bg-brand-card border border-brand-border rounded-xl p-6 shadow-md flex flex-col">
-             <div className="flex justify-between items-center mb-6">
-               <h2 className="text-lg font-bold">Active Classes</h2>
-               <button className="text-xs text-brand-muted hover:text-brand-text transition-colors">View All</button>
-             </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+           {/* LEFT COLUMN: Active Modules & Pending Admissions list */}
+           <div className="lg:col-span-2 flex flex-col gap-6">
              
-             <div className="space-y-4">
-               <div className="bg-brand-bg p-5 rounded-lg border border-brand-border flex items-center justify-between">
-                 <div className="flex gap-4 items-center">
-                   <div className="w-10 h-10 rounded bg-brand-card border border-brand-border flex items-center justify-center">
-                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-brand-muted"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M8 12h8"/></svg>
-                   </div>
-                   <div>
-                     <div className="text-sm font-bold">Subnetting Fundamentals</div>
-                     <div className="text-[10px] text-brand-muted font-mono mt-0.5">CS401 â€¢ Module 3</div>
-                   </div>
-                 </div>
-                 <div className="w-1/3">
-                   <div className="flex justify-between text-[10px] mb-1.5">
-                     <span className="text-brand-text">Progress</span>
-                     <span className="text-brand-cyan font-mono">65%</span>
-                   </div>
-                   <div className="w-full bg-brand-card h-1.5 rounded-full overflow-hidden">
-                     <div className="w-[65%] h-full bg-brand-cyan"></div>
-                   </div>
-                 </div>
+             {/* Active Modules */}
+             <div className="bg-brand-card border border-brand-border rounded-xl p-6 shadow-md flex flex-col">
+               <div className="flex justify-between items-center mb-6">
+                 <h2 className="text-lg font-bold">Active Course Modules</h2>
+                 <button onClick={() => router.push("/professor/modules")} className="text-xs text-brand-cyan hover:text-brand-cyan-hover transition-colors font-bold uppercase tracking-wider">Manage</button>
                </div>
-
-               <div className="bg-brand-bg p-5 rounded-lg border border-brand-border flex items-center justify-between">
-                 <div className="flex gap-4 items-center">
-                   <div className="w-10 h-10 rounded bg-brand-card border border-brand-border flex items-center justify-center">
-                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-brand-muted"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-                   </div>
-                   <div>
-                     <div className="text-sm font-bold">BGP Routing Protocols</div>
-                     <div className="text-[10px] text-brand-muted font-mono mt-0.5">CS402 â€¢ Module 1</div>
-                   </div>
+               
+               {modules.length === 0 ? (
+                 <div className="text-center py-10 text-brand-muted text-sm border border-dashed border-brand-border/40 rounded-xl bg-brand-bg/25">
+                   No modules configured in syllabus. Go to "Manage" to add new learning content.
                  </div>
-                 <div className="w-1/3">
-                   <div className="flex justify-between text-[10px] mb-1.5">
-                     <span className="text-brand-text">Progress</span>
-                     <span className="text-brand-text font-mono">15%</span>
-                   </div>
-                   <div className="w-full bg-brand-card h-1.5 rounded-full overflow-hidden">
-                     <div className="w-[15%] h-full bg-brand-text"></div>
-                   </div>
+               ) : (
+                 <div className="space-y-4">
+                   {modules.map((mod) => (
+                     <div key={mod.id} className="bg-brand-bg/50 p-4 rounded-xl border border-brand-border flex items-center justify-between hover:border-brand-border-hover transition-colors">
+                       <div className="flex gap-4 items-center min-w-0">
+                         <div className="w-10 h-10 rounded-lg bg-brand-card border border-brand-border flex items-center justify-center shrink-0">
+                           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-brand-cyan"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M8 12h8"/></svg>
+                         </div>
+                         <div className="min-w-0">
+                           <div className="text-sm font-bold truncate text-brand-text">{mod.title}</div>
+                           <div className="text-[10px] text-brand-muted font-mono mt-0.5">{mod.topics.length} learning topics outlined</div>
+                         </div>
+                       </div>
+                       <button onClick={() => router.push("/professor/modules")} className="text-xs text-brand-muted hover:text-brand-text transition-colors whitespace-nowrap px-3 py-1.5 rounded-lg border border-brand-border bg-brand-card">
+                         View Details
+                       </button>
+                     </div>
+                   ))}
                  </div>
-               </div>
+               )}
              </div>
+
+             {/* Pending Students Validation Queue */}
+             <div className="bg-brand-card border border-brand-border rounded-xl p-6 shadow-md flex flex-col">
+               <div className="flex justify-between items-center mb-6">
+                 <h2 className="text-lg font-bold">Enrollment validation queue</h2>
+                 {pendingCount > 0 && (
+                   <button onClick={() => router.push("/professor/students")} className="text-xs text-brand-cyan hover:text-brand-cyan-hover transition-colors font-bold uppercase tracking-wider">Validate All</button>
+                 )}
+               </div>
+               
+               {pendingStudents.length === 0 ? (
+                 <div className="text-center py-10 text-brand-muted text-sm border border-dashed border-brand-border/40 rounded-xl bg-brand-bg/25">
+                   All student profiles are verified. No pending admission enrollments.
+                 </div>
+               ) : (
+                 <div className="space-y-4">
+                   {pendingStudents.slice(0, 3).map((stu) => (
+                     <div key={stu.id} className="bg-brand-bg/50 p-4 rounded-xl border border-brand-border flex items-center justify-between hover:border-brand-border-hover transition-colors">
+                       <div className="min-w-0">
+                         <div className="text-sm font-bold text-brand-text truncate">{stu.name || stu.email}</div>
+                         <div className="text-[10px] text-brand-muted font-mono mt-0.5">ID: {stu.studentId || "N/A"} • {stu.email}</div>
+                       </div>
+                       <button onClick={() => router.push("/professor/students")} className="text-xs text-yellow-500 hover:text-yellow-400 bg-yellow-500/10 hover:bg-yellow-500/20 px-3.5 py-1.5 rounded-lg border border-yellow-500/30 transition-colors whitespace-nowrap">
+                         Review
+                       </button>
+                     </div>
+                   ))}
+                   {pendingStudents.length > 3 && (
+                     <div onClick={() => router.push("/professor/students")} className="text-center text-xs font-semibold text-brand-muted hover:text-brand-text transition-colors cursor-pointer py-2 hover:underline">
+                       + {pendingStudents.length - 3} more pending student(s) in queue. Click to view all.
+                     </div>
+                   )}
+                 </div>
+               )}
+             </div>
+
            </div>
 
+           {/* RIGHT COLUMN: Roster Analytics & Quick Actions */}
            <div className="flex flex-col gap-6">
+             {/* Roster Distribution stats */}
              <div className="bg-brand-card border border-brand-border rounded-xl p-6 shadow-md">
-               <h2 className="text-sm font-bold mb-6">Student Engagement</h2>
-               <div className="h-32 flex items-end gap-2 px-2 mb-4">
-                 <div className="flex-1 bg-brand-border/40 h-[30%] rounded-t"></div>
-                 <div className="flex-1 bg-brand-border/40 h-[45%] rounded-t"></div>
-                 <div className="flex-1 bg-brand-border/40 h-[60%] rounded-t"></div>
-                 <div className="flex-1 bg-brand-border/40 h-[40%] rounded-t"></div>
-                 <div className="flex-1 bg-brand-text opacity-90 h-[90%] rounded-t"></div>
-                 <div className="flex-1 bg-brand-border/40 h-[70%] rounded-t"></div>
-                 <div className="flex-1 bg-brand-border/40 h-[50%] rounded-t"></div>
-               </div>
-               <div className="flex justify-between items-center text-xs">
-                 <div>
-                   <div className="text-brand-muted text-[10px] mb-0.5">Peak Day</div>
-                   <div className="font-semibold">Wednesday</div>
+               <h2 className="text-sm font-bold mb-6">Student Roster</h2>
+               <div className="space-y-4 text-xs">
+                 <div className="flex justify-between items-center pb-2 border-b border-brand-border/30">
+                   <span className="text-brand-muted">Admitted Students</span>
+                   <span className="font-bold text-green-400 font-mono">{activeStudentsCount}</span>
                  </div>
-                 <div className="text-right">
-                   <div className="text-brand-muted text-[10px] mb-0.5">Avg. Logins</div>
-                   <div className="text-brand-cyan font-semibold">24/day</div>
+                 <div className="flex justify-between items-center pb-2 border-b border-brand-border/30">
+                   <span className="text-brand-muted">Pending Validation</span>
+                   <span className="font-bold text-yellow-500 font-mono">{pendingCount}</span>
+                 </div>
+                 <div className="flex justify-between items-center font-bold text-sm">
+                   <span>Total Registered</span>
+                   <span className="font-mono text-brand-cyan">{activeStudentsCount + pendingCount}</span>
                  </div>
                </div>
              </div>
 
-              <div className="bg-brand-card border border-brand-border rounded-xl p-6 shadow-md flex-1">
-                <h2 className="text-sm font-bold mb-4">Requires Attention</h2>
-                <div className="space-y-4">
-                  {pendingCount > 0 && (
-                    <div className="flex gap-3 items-start cursor-pointer hover:text-brand-cyan transition-colors" onClick={() => router.push("/professor/students")}>
-                      <div className="mt-1 text-yellow-500">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-                      </div>
-                      <div>
-                        <div className="text-xs font-semibold mb-0.5">{pendingCount} student{pendingCount > 1 ? "s" : ""} need validation</div>
-                        <div className="text-[10px] text-brand-muted">Awaiting admission approval</div>
-                      </div>
-                    </div>
-                  )}
-                  <div className="flex gap-3 items-start">
-                    <div className="mt-1 text-red-500">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                    </div>
-                    <div>
-                      <div className="text-xs font-semibold mb-0.5">3 students failing Lab 2</div>
-                      <div className="text-[10px] text-brand-muted">2 hours ago</div>
-                    </div>
-                  </div>
-                  <div className="flex gap-3 items-start">
-                    <div className="mt-1 text-brand-cyan">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
-                    </div>
-                    <div>
-                      <div className="text-xs font-semibold mb-0.5">New discussion thread in Module 3</div>
-                      <div className="text-[10px] text-brand-muted">5 hours ago</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+             {/* Quick Actions */}
+             <div className="bg-brand-card border border-brand-border rounded-xl p-6 shadow-md">
+               <h2 className="text-sm font-bold mb-4">Quick Actions</h2>
+               <div className="flex flex-col gap-3 text-xs">
+                 <button onClick={() => router.push("/professor/modules")} className="w-full text-left p-3 border border-brand-border hover:border-brand-cyan rounded-xl bg-brand-bg/30 text-brand-text hover:text-brand-cyan transition-all flex items-center justify-between font-semibold">
+                   <span>Configure Course Modules</span>
+                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                 </button>
+                 <button onClick={() => router.push("/professor/students")} className="w-full text-left p-3 border border-brand-border hover:border-brand-cyan rounded-xl bg-brand-bg/30 text-brand-text hover:text-brand-cyan transition-all flex items-center justify-between font-semibold">
+                   <span>Validate Enrollments</span>
+                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                 </button>
+                 <button onClick={() => router.push("/professor/settings")} className="w-full text-left p-3 border border-brand-border hover:border-brand-cyan rounded-xl bg-brand-bg/30 text-brand-text hover:text-brand-cyan transition-all flex items-center justify-between font-semibold">
+                   <span>Edit Profile Settings</span>
+                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                 </button>
+               </div>
+             </div>
            </div>
         </div>
 

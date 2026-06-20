@@ -144,7 +144,7 @@ function InteractiveSubnettingActivity({ onComplete, isCompleted, handleSelectNe
   }, [moduleId]);
 
   // Save scores helper
-  const saveScore = (taskKey: string, score: number) => {
+  const saveScore = async (taskKey: string, score: number) => {
     const savedName = localStorage.getItem("userName") || "Student";
     const key = `interactive_scores_${savedName}_${moduleId}`;
     const stored = localStorage.getItem(key);
@@ -156,6 +156,37 @@ function InteractiveSubnettingActivity({ onComplete, isCompleted, handleSelectNe
     }
     current[taskKey] = score;
     localStorage.setItem(key, JSON.stringify(current));
+
+    // Save to server
+    const email = localStorage.getItem("userEmail") || "";
+    if (email) {
+      try {
+        const userRes = await fetch("/api/users");
+        const userData = await userRes.json();
+        if (userData.success) {
+          const profile = userData.users.find((u: any) => u.email.toLowerCase() === email.toLowerCase());
+          if (profile) {
+            const updatedInteractiveScores = {
+              ...(profile.interactiveScores || {}),
+              [moduleId]: {
+                ...(profile.interactiveScores?.[moduleId] || {}),
+                [taskKey]: score
+              }
+            };
+            await fetch("/api/users", {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                email,
+                interactiveScores: updatedInteractiveScores
+              })
+            });
+          }
+        }
+      } catch (e) {
+        console.error("Error saving interactive scores to server:", e);
+      }
+    }
   };
 
   const handleSubmitVlsm = () => {
@@ -750,6 +781,23 @@ export default function StudentCurriculum() {
   const [pretestAnswers, setPretestAnswers] = useState<Record<number, number>>({});
   const [pretestScore, setPretestScore] = useState<number | null>(null);
 
+  const saveProgressToServer = async (updates: any) => {
+    const email = localStorage.getItem("userEmail") || "";
+    if (!email) return;
+    try {
+      await fetch("/api/users", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          ...updates
+        })
+      });
+    } catch (e) {
+      console.error("Error saving progress to server:", e);
+    }
+  };
+
   const workspaceRef = useRef<HTMLDivElement | null>(null);
 
   const selectedModule = modules.find(m => m.id === selectedModuleId);
@@ -1193,6 +1241,10 @@ export default function StudentCurriculum() {
     const updated = { ...completedTopics, [topicId]: !completedTopics[topicId] };
     setCompletedTopics(updated);
     localStorage.setItem(`completed_topics_${savedName}`, JSON.stringify(updated));
+
+    saveProgressToServer({
+      completedTopics: updated
+    });
   };
 
   const markVideoAsWatched = (materialId: number) => {
@@ -1200,6 +1252,10 @@ export default function StudentCurriculum() {
     const updated = { ...watchedVideos, [materialId]: true };
     setWatchedVideos(updated);
     localStorage.setItem(`watched_videos_${savedName}`, JSON.stringify(updated));
+
+    saveProgressToServer({
+      watchedVideos: updated
+    });
   };
 
   const getTopicVideoMaterial = (topic: Topic) => {
@@ -1261,17 +1317,22 @@ export default function StudentCurriculum() {
     const updatedScores = { ...pretestScores, [moduleId]: score };
     setPretestScores(updatedScores);
     localStorage.setItem(`pretest_scores_${savedName}`, JSON.stringify(updatedScores));
+
+    saveProgressToServer({
+      completedPretests: updated,
+      pretestScores: updatedScores
+    });
   };
 
   const isTopicUnlocked = (mod: Module, topicIdx: number): boolean => {
     if (mod.pretest && mod.pretest.length > 0) {
-      if (!completedPretests[mod.id]) {
+      if (!completedPretests || !completedPretests[mod.id]) {
         return false;
       }
     }
     if (topicIdx === 0) return true;
     const prevTopic = mod.topics[topicIdx - 1];
-    return !!completedTopics[prevTopic.id];
+    return !!(completedTopics && prevTopic && completedTopics[prevTopic.id]);
   };
 
   const ensureInteractiveActivity = (mods: Module[]): Module[] => {
@@ -1330,6 +1391,28 @@ export default function StudentCurriculum() {
               );
               if (profile) {
                 setUserProfile(profile);
+                const savedName = localStorage.getItem("userName") || "Student";
+                if (profile.completedTopics) {
+                  localStorage.setItem(`completed_topics_${savedName}`, JSON.stringify(profile.completedTopics));
+                  setCompletedTopics(profile.completedTopics);
+                }
+                if (profile.watchedVideos) {
+                  localStorage.setItem(`watched_videos_${savedName}`, JSON.stringify(profile.watchedVideos));
+                  setWatchedVideos(profile.watchedVideos);
+                }
+                if (profile.completedPretests) {
+                  localStorage.setItem(`completed_pretests_${savedName}`, JSON.stringify(profile.completedPretests));
+                  setCompletedPretests(profile.completedPretests);
+                }
+                if (profile.pretestScores) {
+                  localStorage.setItem(`pretest_scores_${savedName}`, JSON.stringify(profile.pretestScores));
+                  setPretestScores(profile.pretestScores);
+                }
+                if (profile.interactiveScores) {
+                  Object.entries(profile.interactiveScores).forEach(([mId, scores]) => {
+                    localStorage.setItem(`interactive_scores_${savedName}_${mId}`, JSON.stringify(scores));
+                  });
+                }
               }
             }
           } catch (e) {
@@ -1835,12 +1918,17 @@ export default function StudentCurriculum() {
                 Networking 1
               </h3>
 
-              <div className="flex flex-col gap-3 overflow-y-auto max-h-[500px]">
+              <div className="flex flex-col gap-3">
                 {/* Subject Overview Static Section */}
                 <div className="border border-brand-border/40 rounded-xl overflow-hidden">
                   <button
                     onClick={() => {
                       setExpandedSubjectOverview(!expandedSubjectOverview);
+                      setSelectedSpecialItem("announcements");
+                      setSelectedTopic(null);
+                      setSelectedSubtopic(null);
+                      setSelectedModuleId(null);
+                      setTakingPretest(false);
                     }}
                     className={`w-full px-4 py-3 flex items-center justify-between text-left transition-colors border-b border-brand-border/20 hover:bg-brand-bg/85 ${selectedSpecialItem !== null
                         ? "bg-brand-cyan/15 text-brand-cyan font-bold border-l-2 border-l-brand-cyan"
@@ -1929,12 +2017,14 @@ export default function StudentCurriculum() {
                       {/* Module Header Button */}
                       <button
                         onClick={() => {
-                          setSelectedModuleId(mod.id);
-                          setSelectedTopic(null);
-                          setSelectedSubtopic(null);
-                          setSelectedSpecialItem(null);
-                          setTakingPretest(false);
                           toggleModuleExpand(mod.id);
+                          if (selectedSpecialItem === null && selectedTopic === null) {
+                            setSelectedModuleId(mod.id);
+                            setSelectedTopic(null);
+                            setSelectedSubtopic(null);
+                            setSelectedSpecialItem(null);
+                            setTakingPretest(false);
+                          }
                         }}
                         className={`w-full px-4 py-3 flex items-center justify-between text-left transition-colors border-b border-brand-border/20 hover:bg-brand-bg/85 ${selectedModuleId === mod.id && !selectedTopic
                           ? "bg-brand-cyan/15 text-brand-cyan font-bold border-l-2 border-l-brand-cyan"
@@ -1964,6 +2054,52 @@ export default function StudentCurriculum() {
                       {/* Topics List within Module */}
                       {isModExpanded && (
                         <div className="p-2 flex flex-col gap-1.5 bg-brand-card/30">
+                          {mod.pretest && mod.pretest.length > 0 && (
+                            <button
+                              onClick={() => {
+                                setSelectedModuleId(mod.id);
+                                setSelectedTopic(null);
+                                setSelectedSubtopic(null);
+                                setSelectedSpecialItem(null);
+                                setTakingPretest(true);
+                              }}
+                              className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors ${
+                                takingPretest && selectedModuleId === mod.id && selectedTopic === null
+                                  ? "bg-brand-cyan text-brand-bg font-bold shadow-sm"
+                                  : "text-brand-muted hover:text-brand-text hover:bg-brand-bg/40"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 text-sm font-bold min-w-0 flex-grow whitespace-normal break-words leading-tight">
+                                {completedPretests && completedPretests[mod.id] ? (
+                                  <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    width="14"
+                                    height="14"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2.5"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    className={`shrink-0 ${
+                                      takingPretest && selectedModuleId === mod.id && selectedTopic === null
+                                        ? "text-green-800"
+                                        : "text-green-500"
+                                    }`}
+                                  >
+                                    <circle cx="12" cy="12" r="10" />
+                                    <path d="m9 12 2 2 4-4" />
+                                  </svg>
+                                ) : (
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-brand-border/40">
+                                    <circle cx="12" cy="12" r="10" />
+                                  </svg>
+                                )}
+                                <span>📝 Module Pre-test</span>
+                              </div>
+                            </button>
+                          )}
+
                           {mod.topics.length === 0 ? (
                             <div className="text-[10px] text-brand-muted/70 px-3 py-2 italic">
                               No topics outlined yet
@@ -2140,11 +2276,13 @@ export default function StudentCurriculum() {
                     <h2 className="text-xl font-bold mt-0.5">{selectedModule.title} — Pre-test</h2>
                   </div>
 
-                  {pretestScore !== null ? (
+                  {pretestScore !== null || (completedPretests && completedPretests[selectedModule.id]) ? (
                     // Show Pre-test Results
                     <div className="flex-grow flex flex-col items-center justify-center text-center p-6 bg-brand-bg/25 border border-brand-border/40 rounded-2xl">
                       <div className="w-28 h-28 rounded-full border-4 border-brand-cyan flex flex-col items-center justify-center mb-6 animate-scaleIn">
-                        <span className="text-3xl font-extrabold text-brand-cyan leading-none">{pretestScore}</span>
+                        <span className="text-3xl font-extrabold text-brand-cyan leading-none">
+                          {pretestScore !== null ? pretestScore : (pretestScores && pretestScores[selectedModule.id] !== undefined ? pretestScores[selectedModule.id] : 0)}
+                        </span>
                         <div className="w-10 h-[1.5px] bg-brand-cyan/30 my-1.5"></div>
                         <span className="text-sm font-bold text-brand-muted leading-none">{selectedModule.pretest.length}</span>
                       </div>
@@ -2331,7 +2469,7 @@ export default function StudentCurriculum() {
                                       {topic.title}
                                     </h4>
                                   </div>
-                                  <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${!isUnlocked
+                                  <span className={`text-[10px] font-mono px-2.5 py-0.5 rounded-full whitespace-nowrap ${!isUnlocked
                                     ? "bg-brand-muted/10 text-brand-muted border border-brand-border/40"
                                     : progress === 100
                                       ? "bg-green-500/10 text-green-400 border border-green-500/25"

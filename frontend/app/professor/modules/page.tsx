@@ -1,7 +1,569 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Sidebar from "@/components/Sidebar";
+
+// Helper to extract clean user initials for avatars
+function getAvatarInitials(name: string) {
+  if (!name) return "?";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+  return parts[0].substring(0, 2).toUpperCase();
+}
+
+interface InteractiveSubnettingActivityProps {
+  onComplete: () => void;
+  isCompleted: boolean;
+  handleSelectNextTopic: () => void;
+  moduleId: number;
+}
+
+function InteractiveSubnettingActivity({ onComplete, isCompleted, handleSelectNextTopic, moduleId }: InteractiveSubnettingActivityProps) {
+  const [activeTab, setActiveTab] = useState<"vlsm" | "anding" | "ipv6">("vlsm");
+
+  // Task 1: VLSM States
+  const [vlsmPrefixes, setVlsmPrefixes] = useState<Record<string, string>>({
+    Sales: "",
+    IT: "",
+    HR: "",
+    WAN: "",
+  });
+
+  const [vlsmNetworks, setVlsmNetworks] = useState<Record<string, string>>({
+    Sales: "",
+    IT: "",
+    HR: "",
+    WAN: "",
+  });
+
+  const vlsmCorrectPrefixes: Record<string, string> = {
+    Sales: "/25",
+    IT: "/26",
+    HR: "/27",
+    WAN: "/30",
+  };
+
+  const vlsmCorrectNetworks: Record<string, string> = {
+    Sales: "192.168.10.0",
+    IT: "192.168.10.128",
+    HR: "192.168.10.192",
+    WAN: "192.168.10.224",
+  };
+
+  const isVlsmCorrect =
+    Object.keys(vlsmCorrectPrefixes).every(k => vlsmPrefixes[k] === vlsmCorrectPrefixes[k]) &&
+    Object.keys(vlsmCorrectNetworks).every(k => vlsmNetworks[k] === vlsmCorrectNetworks[k]);
+
+  // Task 2: Bitwise ANDing States
+  const [andingBits, setAndingBits] = useState<number[]>([0, 0, 0, 0, 0, 0, 0, 0]);
+  const [andingDecimalResult, setAndingDecimalResult] = useState<string>("");
+
+  const toggleAndingBit = (idx: number) => {
+    setAndingBits(prev => {
+      const copy = [...prev];
+      copy[idx] = copy[idx] === 1 ? 0 : 1;
+      return copy;
+    });
+  };
+
+  const correctAndingBits = [0, 1, 0, 0, 0, 0, 0, 0];
+  const correctAndingDecimal = "64";
+
+  const isAndingCorrect =
+    andingBits.every((b, idx) => b === correctAndingBits[idx]) &&
+    andingDecimalResult.trim() === correctAndingDecimal;
+
+  // Task 3: IPv6 Address Anatomy States
+  const [ipv6Prefix, setIpv6Prefix] = useState<string>("");
+  const [ipv6Subnet, setIpv6Subnet] = useState<string>("");
+  const [ipv6Interface, setIpv6Interface] = useState<string>("");
+
+  const isIpv6Correct =
+    ipv6Prefix === "2001:0db8:acad" &&
+    ipv6Subnet === "0001" &&
+    ipv6Interface === "0000:0000:0000:0001";
+
+  // Score states
+  const [vlsmScore, setVlsmScore] = useState<number | null>(null);
+  const [andingScore, setAndingScore] = useState<number | null>(null);
+  const [ipv6Score, setIpv6Score] = useState<number | null>(null);
+
+  // Load scores
+  useEffect(() => {
+    const savedName = localStorage.getItem("userName") || "Student";
+    const key = `interactive_scores_${savedName}_${moduleId}`;
+    const stored = localStorage.getItem(key);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (parsed.vlsm !== undefined) setVlsmScore(parsed.vlsm);
+        if (parsed.anding !== undefined) setAndingScore(parsed.anding);
+        if (parsed.ipv6 !== undefined) setIpv6Score(parsed.ipv6);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  }, [moduleId]);
+
+  // Save scores helper
+  const saveScore = (taskKey: string, score: number) => {
+    const savedName = localStorage.getItem("userName") || "Student";
+    const key = `interactive_scores_${savedName}_${moduleId}`;
+    const stored = localStorage.getItem(key);
+    let current: any = {};
+    if (stored) {
+      try {
+        current = JSON.parse(stored);
+      } catch (e) { }
+    }
+    current[taskKey] = score;
+    localStorage.setItem(key, JSON.stringify(current));
+  };
+
+  const handleSubmitVlsm = () => {
+    let score = 0;
+    if (vlsmPrefixes.Sales === "/25") score += 1;
+    if (vlsmNetworks.Sales === "192.168.10.0") score += 1;
+    if (vlsmPrefixes.IT === "/26") score += 1;
+    if (vlsmNetworks.IT === "192.168.10.128") score += 1;
+    if (vlsmPrefixes.HR === "/27") score += 1;
+    if (vlsmNetworks.HR === "192.168.10.192") score += 1;
+    if (vlsmPrefixes.WAN === "/30") score += 1;
+    if (vlsmNetworks.WAN === "192.168.10.224") score += 1;
+
+    setVlsmScore(score);
+    saveScore("vlsm", score);
+  };
+
+  const handleSubmitAnding = () => {
+    let score = 0;
+    andingBits.forEach((b, idx) => {
+      if (b === correctAndingBits[idx]) score += 1;
+    });
+    if (andingDecimalResult.trim() === correctAndingDecimal) score += 1;
+
+    setAndingScore(score);
+    saveScore("anding", score);
+  };
+
+  const handleSubmitIpv6 = () => {
+    let score = 0;
+    if (ipv6Prefix === "2001:0db8:acad") score += 1;
+    if (ipv6Subnet === "0001") score += 1;
+    if (ipv6Interface === "0000:0000:0000:0001") score += 1;
+
+    setIpv6Score(score);
+    saveScore("ipv6", score);
+  };
+
+  // Auto-complete course topic once all sub-tasks are submitted
+  useEffect(() => {
+    if (vlsmScore !== null && andingScore !== null && ipv6Score !== null) {
+      onComplete();
+    }
+  }, [vlsmScore, andingScore, ipv6Score]);
+
+  return (
+    <div className="flex-grow flex flex-col gap-6 select-none animate-fadeIn" onContextMenu={(e) => e.preventDefault()} onCopy={(e) => e.preventDefault()} onCut={(e) => e.preventDefault()}>
+      {/* Tabs */}
+      <div className="flex border-b border-brand-border/40">
+        <button
+          onClick={() => setActiveTab("vlsm")}
+          className={`px-4 py-3 text-xs font-bold transition-all border-b-2 cursor-pointer ${activeTab === "vlsm"
+            ? "border-brand-cyan text-brand-cyan"
+            : "border-transparent text-brand-muted hover:text-brand-text"
+            }`}
+        >
+          Task 1: VLSM Design {vlsmScore !== null ? `(${vlsmScore}/8) ✓` : ""}
+        </button>
+        <button
+          onClick={() => setActiveTab("anding")}
+          className={`px-4 py-3 text-xs font-bold transition-all border-b-2 cursor-pointer ${activeTab === "anding"
+            ? "border-brand-cyan text-brand-cyan"
+            : "border-transparent text-brand-muted hover:text-brand-text"
+            }`}
+        >
+          Task 2: Bitwise ANDing {andingScore !== null ? `(${andingScore}/9) ✓` : ""}
+        </button>
+        <button
+          onClick={() => setActiveTab("ipv6")}
+          className={`px-4 py-3 text-xs font-bold transition-all border-b-2 cursor-pointer ${activeTab === "ipv6"
+            ? "border-brand-cyan text-brand-cyan"
+            : "border-transparent text-brand-muted hover:text-brand-text"
+            }`}
+        >
+          Task 3: IPv6 Address Anatomy {ipv6Score !== null ? `(${ipv6Score}/3) ✓` : ""}
+        </button>
+      </div>
+
+      {/* Task 1: VLSM Address Planning */}
+      {activeTab === "vlsm" && (
+        <div className="flex flex-col gap-4">
+          <div className="bg-brand-bg/40 border border-brand-border/30 rounded-xl p-4">
+            <h3 className="font-bold text-sm text-brand-cyan mb-1">VLSM Design Exercise</h3>
+            <p className="text-xs text-brand-muted leading-relaxed">
+              Your company has been allocated the base network block <strong className="text-brand-text">192.168.10.0/24</strong>. You need to assign the appropriate CIDR prefix mask and Network Address to each department to satisfy their host requirements while minimizing wastage.
+              <br />
+              <strong className="text-brand-text">Golden Rule:</strong> Always assign addresses to the largest subnet requirements first, then work your way down!
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Form */}
+            <div className="flex flex-col gap-3">
+              {["Sales", "IT", "HR", "WAN"].map((dept) => {
+                const reqs: Record<string, string> = {
+                  Sales: "120 hosts",
+                  IT: "50 hosts",
+                  HR: "25 hosts",
+                  WAN: "2 hosts",
+                };
+                return (
+                  <div key={dept} className="bg-brand-bg/20 border border-brand-border/30 rounded-xl p-4 flex flex-col gap-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-brand-text">{dept} Department</span>
+                      <span className="text-[10px] bg-brand-cyan/10 text-brand-cyan px-2 py-0.5 rounded font-bold font-mono">
+                        Requires {reqs[dept]}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* Prefix Select */}
+                      <div>
+                        <label className="text-[9px] uppercase tracking-wider text-brand-muted block mb-1 font-bold">Subnet Mask Prefix</label>
+                        <select
+                          value={vlsmPrefixes[dept]}
+                          onChange={(e) => setVlsmPrefixes(prev => ({ ...prev, [dept]: e.target.value }))}
+                          className="w-full bg-brand-card border border-brand-border/40 text-xs text-brand-text px-2 py-2.5 rounded-lg focus:outline-none focus:border-brand-cyan cursor-pointer"
+                        >
+                          <option value="">Select Prefix...</option>
+                          <option value="/25">/25 (128 addresses)</option>
+                          <option value="/26">/26 (64 addresses)</option>
+                          <option value="/27">/27 (32 addresses)</option>
+                          <option value="/30">/30 (4 addresses)</option>
+                        </select>
+                      </div>
+
+                      {/* Network Select */}
+                      <div>
+                        <label className="text-[9px] uppercase tracking-wider text-brand-muted block mb-1 font-bold">Network Address</label>
+                        <select
+                          value={vlsmNetworks[dept]}
+                          onChange={(e) => setVlsmNetworks(prev => ({ ...prev, [dept]: e.target.value }))}
+                          className="w-full bg-brand-card border border-brand-border/40 text-xs text-brand-text px-2 py-2.5 rounded-lg focus:outline-none focus:border-brand-cyan cursor-pointer"
+                        >
+                          <option value="">Select Address...</option>
+                          <option value="192.168.10.0">192.168.10.0</option>
+                          <option value="192.168.10.128">192.168.10.128</option>
+                          <option value="192.168.10.192">192.168.10.192</option>
+                          <option value="192.168.10.224">192.168.10.224</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Validation Panel */}
+            <div className="bg-brand-bg/15 border border-brand-border/20 rounded-xl p-5 flex flex-col gap-4">
+              <h4 className="font-bold text-xs uppercase tracking-wider text-brand-muted">Design Validation Checklist</h4>
+              <div className="flex flex-col gap-3">
+                {["Sales", "IT", "HR", "WAN"].map((dept) => {
+                  const prefixCorrect = vlsmPrefixes[dept] === vlsmCorrectPrefixes[dept];
+                  const networkCorrect = vlsmNetworks[dept] === vlsmCorrectNetworks[dept];
+
+                  return (
+                    <div key={dept} className="flex flex-col gap-1 border-b border-brand-border/10 pb-3 last:border-b-0 last:pb-0">
+                      <div className="flex justify-between items-center text-xs font-bold text-brand-text">
+                        <span>{dept} Department</span>
+                        {prefixCorrect && networkCorrect ? (
+                          <span className="text-green-400 font-bold">✓ Validated</span>
+                        ) : (
+                          <span className="text-brand-muted font-normal text-[10px]">Pending validation</span>
+                        )}
+                      </div>
+                      <div className="flex gap-4 text-[10px] mt-1">
+                        <span className={prefixCorrect ? "text-green-400" : "text-brand-muted"}>
+                          {prefixCorrect ? `Prefix: ${vlsmPrefixes[dept]} (Correct)` : "Prefix: Unmatched"}
+                        </span>
+                        <span className={networkCorrect ? "text-green-400" : "text-brand-muted"}>
+                          {networkCorrect ? `Network: ${vlsmNetworks[dept]} (Correct)` : "Network Address: Unmatched"}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {isVlsmCorrect ? (
+                <div className="mt-auto bg-green-500/10 border border-green-500/20 text-green-400 p-4 rounded-xl text-center text-xs font-bold">
+                  🎉 Task 1 Configurations Valid! Click Submit below to record your grade.
+                </div>
+              ) : (
+                <div className="mt-auto bg-brand-bg/50 border border-brand-border/40 text-brand-muted p-4 rounded-xl text-center text-xs">
+                  Match the prefix sizes and network boundaries correctly based on the VLSM Golden Rule.
+                </div>
+              )}
+              <button
+                onClick={handleSubmitVlsm}
+                disabled={Object.values(vlsmPrefixes).some(v => !v) || Object.values(vlsmNetworks).some(v => !v)}
+                className="w-full mt-3 px-5 py-2.5 bg-brand-cyan hover:bg-brand-cyan-hover disabled:opacity-50 disabled:cursor-not-allowed text-brand-bg text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-md shrink-0"
+              >
+                {vlsmScore !== null ? "Resubmit Task 1" : "Submit Task 1"}
+              </button>
+              {vlsmScore !== null && (
+                <div className="bg-brand-cyan/15 border border-brand-cyan/25 px-4 py-2.5 rounded-xl flex items-center justify-between mt-2 animate-scaleIn">
+                  <div className="text-[10px] text-brand-cyan uppercase tracking-wider font-bold">Recorded Score</div>
+                  <div className="text-sm font-mono font-extrabold text-brand-cyan">{vlsmScore} / 8</div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Task 2: Bitwise ANDing */}
+      {activeTab === "anding" && (
+        <div className="flex flex-col gap-4">
+          <div className="bg-brand-bg/40 border border-brand-border/30 rounded-xl p-4">
+            <h3 className="font-bold text-sm text-brand-cyan mb-1">Bitwise ANDing Operations</h3>
+            <p className="text-xs text-brand-muted leading-relaxed">
+              When a router processes a packet, it extracts the Network ID using bitwise ANDing.
+              <br />
+              <strong>Exercise:</strong> Perform the AND operation on the last octet for a packet destined to <strong className="text-brand-text">192.168.1.75</strong> with a mask of <strong className="text-brand-text">255.255.255.192 (/26)</strong>.
+              <br />
+              Toggle the bits in the output row to calculate the result of the bitwise AND, and enter the final Network ID in decimal.
+            </p>
+          </div>
+
+          <div className="bg-brand-bg/20 border border-brand-border/30 rounded-xl p-5 flex flex-col gap-6">
+            <div className="grid grid-cols-10 items-center gap-2 font-mono text-center text-xs md:text-sm">
+              {/* Header */}
+              <div className="col-span-2 text-left font-sans font-bold text-brand-muted text-xs">Octet Rows</div>
+              {[128, 64, 32, 16, 8, 4, 2, 1].map(v => (
+                <div key={v} className="text-[10px] text-brand-muted font-bold">{v}</div>
+              ))}
+
+              {/* Row 1: Destination IP octet 75 */}
+              <div className="col-span-2 text-left font-sans font-bold text-brand-text">IP (75)</div>
+              {[0, 1, 0, 0, 1, 0, 1, 1].map((b, idx) => (
+                <div key={idx} className="bg-brand-bg border border-brand-border/40 p-2 rounded-lg text-brand-text/80">{b}</div>
+              ))}
+
+              {/* Row 2: Subnet Mask octet 192 */}
+              <div className="col-span-2 text-left font-sans font-bold text-brand-text">Mask (192)</div>
+              {[1, 1, 0, 0, 0, 0, 0, 0].map((b, idx) => (
+                <div key={idx} className="bg-brand-bg border border-brand-border/40 p-2 rounded-lg text-brand-text/80">{b}</div>
+              ))}
+
+              {/* Operator */}
+              <div className="col-span-10 border-t border-dashed border-brand-border/40 my-1"></div>
+
+              {/* Row 3: Output AND (Interactive) */}
+              <div className="col-span-2 text-left font-sans font-bold text-brand-cyan flex items-center gap-1">
+                <span>Result (AND)</span>
+              </div>
+              {andingBits.map((b, idx) => {
+                return (
+                  <button
+                    key={idx}
+                    onClick={() => toggleAndingBit(idx)}
+                    className={`p-2.5 rounded-lg border font-mono font-bold text-sm cursor-pointer transition-all ${b === 1
+                      ? "bg-brand-cyan/20 border-brand-cyan text-brand-cyan shadow-sm"
+                      : "bg-brand-card border-brand-border/40 text-brand-muted hover:border-brand-border"
+                      }`}
+                  >
+                    {b}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Decimal Input */}
+            <div className="flex flex-col sm:flex-row items-center gap-4 border-t border-brand-border/20 pt-6 mt-2">
+              <div className="flex-grow">
+                <label className="text-xs font-bold text-brand-text block mb-1">Resulting Network ID Address</label>
+                <p className="text-[10px] text-brand-muted">
+                  Type the X value for the Network ID `192.168.1.X`, where X is the decimal conversion of your AND bits.
+                </p>
+              </div>
+
+              <div className="flex gap-2 items-center">
+                <span className="font-mono text-sm text-brand-text select-none">192.168.1.</span>
+                <input
+                  type="text"
+                  value={andingDecimalResult}
+                  onChange={(e) => setAndingDecimalResult(e.target.value)}
+                  placeholder="X"
+                  className="w-20 bg-brand-card border border-brand-border/40 focus:border-brand-cyan focus:outline-none rounded-lg px-3 py-2 text-center text-sm font-mono text-brand-cyan font-bold"
+                />
+              </div>
+            </div>
+
+            {isAndingCorrect ? (
+              <div className="bg-green-500/10 border border-green-500/20 text-green-400 p-4 rounded-xl text-center text-xs font-bold mt-2">
+                🎉 Correct configuration! Click Submit below to record your grade.
+              </div>
+            ) : (
+              <div className="bg-brand-bg/30 border border-brand-border/30 text-brand-muted p-4 rounded-xl text-center text-xs mt-2">
+                Perform AND on each vertical pair: 1 AND 1 = 1, any other combination = 0. Then calculate the decimal sum of the output bits.
+              </div>
+            )}
+            <button
+              onClick={handleSubmitAnding}
+              disabled={!andingDecimalResult.trim()}
+              className="w-full mt-4 px-5 py-2.5 bg-brand-cyan hover:bg-brand-cyan-hover disabled:opacity-50 disabled:cursor-not-allowed text-brand-bg text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-md shrink-0"
+            >
+              {andingScore !== null ? "Resubmit Task 2" : "Submit Task 2"}
+            </button>
+            {andingScore !== null && (
+              <div className="bg-brand-cyan/15 border border-brand-cyan/25 px-4 py-2.5 rounded-xl flex items-center justify-between mt-2 animate-scaleIn">
+                <div className="text-[10px] text-brand-cyan uppercase tracking-wider font-bold">Recorded Score</div>
+                <div className="text-sm font-mono font-extrabold text-brand-cyan">{andingScore} / 9</div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Task 3: IPv6 Address Anatomy */}
+      {activeTab === "ipv6" && (
+        <div className="flex flex-col gap-4">
+          <div className="bg-brand-bg/40 border border-brand-border/30 rounded-xl p-4">
+            <h3 className="font-bold text-sm text-brand-cyan mb-1">IPv6 Address Structure Matching</h3>
+            <p className="text-xs text-brand-muted leading-relaxed">
+              IPv6 uses 128-bit addresses standardizing on a /64 local subnet boundary.
+              <br />
+              <strong>Exercise:</strong> Map each segment of the address <strong className="text-brand-text">2001:0db8:acad : 0001 : 0000:0000:0000:0001</strong> to its correct architectural label.
+            </p>
+          </div>
+
+          <div className="bg-brand-bg/20 border border-brand-border/30 rounded-xl p-5 flex flex-col gap-6">
+            <div className="flex flex-col gap-4 items-center">
+              {/* Address segments visual display */}
+              <div className="flex flex-wrap gap-2 text-xs md:text-sm font-mono font-bold text-center">
+                <div className={`px-3 py-2 rounded-lg border ${ipv6Prefix === "2001:0db8:acad" ? "bg-brand-cyan/15 border-brand-cyan text-brand-cyan" : "bg-brand-card border-brand-border/40 text-brand-text"}`}>
+                  2001:0db8:acad
+                </div>
+                <span className="self-center text-brand-muted font-sans">:</span>
+                <div className={`px-3 py-2 rounded-lg border ${ipv6Subnet === "0001" ? "bg-brand-cyan/15 border-brand-cyan text-brand-cyan" : "bg-brand-card border-brand-border/40 text-brand-text"}`}>
+                  0001
+                </div>
+                <span className="self-center text-brand-muted font-sans">:</span>
+                <div className={`px-3 py-2 rounded-lg border ${ipv6Interface === "0000:0000:0000:0001" ? "bg-brand-cyan/15 border-brand-cyan text-brand-cyan" : "bg-brand-card border-brand-border/40 text-brand-text"}`}>
+                  0000:0000:0000:0001
+                </div>
+              </div>
+
+              {/* Mappers */}
+              <div className="w-full grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                {/* Prefix Mapper */}
+                <div className="bg-brand-bg/40 border border-brand-border/40 p-4 rounded-xl flex flex-col gap-2">
+                  <span className="text-[10px] text-brand-cyan uppercase tracking-wider font-bold">Global Routing Prefix</span>
+                  <select
+                    value={ipv6Prefix}
+                    onChange={(e) => setIpv6Prefix(e.target.value)}
+                    className="w-full bg-brand-card border border-brand-border/40 text-xs text-brand-text px-2 py-2 rounded-lg focus:outline-none focus:border-brand-cyan cursor-pointer"
+                  >
+                    <option value="">Select Segment...</option>
+                    <option value="2001:0db8:acad">2001:0db8:acad</option>
+                    <option value="0001">0001</option>
+                    <option value="0000:0000:0000:0001">0000:0000:0000:0001</option>
+                  </select>
+                </div>
+
+                {/* Subnet ID Mapper */}
+                <div className="bg-brand-bg/40 border border-brand-border/40 p-4 rounded-xl flex flex-col gap-2">
+                  <span className="text-[10px] text-brand-cyan uppercase tracking-wider font-bold">Subnet ID (16 bits)</span>
+                  <select
+                    value={ipv6Subnet}
+                    onChange={(e) => setIpv6Subnet(e.target.value)}
+                    className="w-full bg-brand-card border border-brand-border/40 text-xs text-brand-text px-2 py-2 rounded-lg focus:outline-none focus:border-brand-cyan/70 cursor-pointer"
+                  >
+                    <option value="">Select Segment...</option>
+                    <option value="2001:0db8:acad">2001:0db8:acad</option>
+                    <option value="0001">0001</option>
+                    <option value="0000:0000:0000:0001">0000:0000:0000:0001</option>
+                  </select>
+                </div>
+
+                {/* Interface ID Mapper */}
+                <div className="bg-brand-bg/40 border border-brand-border/40 p-4 rounded-xl flex flex-col gap-2">
+                  <span className="text-[10px] text-brand-cyan uppercase tracking-wider font-bold">Interface ID (64 bits)</span>
+                  <select
+                    value={ipv6Interface}
+                    onChange={(e) => setIpv6Interface(e.target.value)}
+                    className="w-full bg-brand-card border border-brand-border/40 text-xs text-brand-text px-2 py-2 rounded-lg focus:outline-none focus:border-brand-cyan cursor-pointer"
+                  >
+                    <option value="">Select Segment...</option>
+                    <option value="2001:0db8:acad">2001:0db8:acad</option>
+                    <option value="0001">0001</option>
+                    <option value="0000:0000:0000:0001">0000:0000:0000:0001</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {isIpv6Correct ? (
+              <div className="bg-green-500/10 border border-green-500/20 text-green-400 p-4 rounded-xl text-center text-xs font-bold mt-2">
+                🎉 Correct configuration! Click Submit below to record your grade.
+              </div>
+            ) : (
+              <div className="bg-brand-bg/30 border border-brand-border/30 text-brand-muted p-4 rounded-xl text-center text-xs mt-2">
+                Map each block: Global prefix represents network identifier (first 3 blocks), subnet ID represents routing division (4th block), Interface ID is device address (last 4 blocks).
+              </div>
+            )}
+            <button
+              onClick={handleSubmitIpv6}
+              disabled={!ipv6Prefix || !ipv6Subnet || !ipv6Interface}
+              className="w-full mt-4 px-5 py-2.5 bg-brand-cyan hover:bg-brand-cyan-hover disabled:opacity-50 disabled:cursor-not-allowed text-brand-bg text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-md shrink-0"
+            >
+              {ipv6Score !== null ? "Resubmit Task 3" : "Submit Task 3"}
+            </button>
+            {ipv6Score !== null && (
+              <div className="bg-brand-cyan/15 border border-brand-cyan/25 px-4 py-2.5 rounded-xl flex items-center justify-between mt-2 animate-scaleIn">
+                <div className="text-[10px] text-brand-cyan uppercase tracking-wider font-bold">Recorded Score</div>
+                <div className="text-sm font-mono font-extrabold text-brand-cyan">{ipv6Score} / 3</div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Completion Banner */}
+      {isCompleted || (vlsmScore !== null && andingScore !== null && ipv6Score !== null) ? (
+        <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-6 animate-scaleIn">
+          <div>
+            <h3 className="font-bold text-sm text-green-400 flex items-center gap-1.5">
+              🎉 Interactive Activity Completed!
+            </h3>
+            <p className="text-xs text-brand-muted mt-1 leading-relaxed">
+              Excellent job! You successfully submitted and auto-graded all three subnetting tasks.
+            </p>
+            <div className="mt-2 text-xs text-brand-text flex items-center gap-2">
+              <span className="text-[10px] bg-brand-cyan/15 border border-brand-cyan/20 text-brand-cyan px-2 py-0.5 rounded font-mono font-bold">
+                Overall Grade: {(vlsmScore || 0) + (andingScore || 0) + (ipv6Score || 0)} / 20
+              </span>
+            </div>
+          </div>
+          <button
+            onClick={handleSelectNextTopic}
+            className="px-5 py-2.5 bg-brand-cyan hover:bg-brand-cyan-hover text-brand-bg text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-md inline-flex items-center gap-2 shrink-0"
+          >
+            <span>Finish Module</span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+          </button>
+        </div>
+      ) : (
+        <div className="bg-brand-bg/10 border border-brand-border/40 rounded-xl p-4 text-center text-xs text-brand-muted mt-6">
+          Submit all 3 tasks (VLSM, ANDing, and IPv6 Structure) to finish this activity and record your overall grade.
+        </div>
+      )}
+    </div>
+  );
+}
 
 type MaterialType = "text" | "video" | "image" | "file";
 
@@ -44,6 +606,48 @@ type Module = {
 
 const DEFAULT_MODULES: Module[] = [];
 
+const ensureInteractiveActivity = (mods: Module[]): Module[] => {
+  if (mods.length === 0) return mods;
+  return mods.map((mod, idx) => {
+    if (idx === 0) {
+      const baseTopics = mod.topics.filter(t => t.id !== 888888 && t.id !== 999999);
+      return {
+        ...mod,
+        topics: [
+          ...baseTopics,
+          {
+            id: 888888,
+            title: "Module Discussion Forum",
+            materials: [
+              {
+                id: 8888881,
+                type: "text",
+                title: "Discussion Feed",
+                content: "module-discussion-placeholder"
+              }
+            ],
+            subtopics: []
+          },
+          {
+            id: 999999,
+            title: "Interactive Subnetting Activity",
+            materials: [
+              {
+                id: 9999991,
+                type: "text",
+                title: "Hands-on Exercises",
+                content: "interactive-activity-placeholder"
+              }
+            ],
+            subtopics: []
+          }
+        ]
+      };
+    }
+    return mod;
+  });
+};
+
 export default function ProfessorModules() {
   const [modules, setModules] = useState<Module[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -56,6 +660,44 @@ export default function ProfessorModules() {
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [previewTopic, setPreviewTopic] = useState<Topic | null>(null);
   const [previewSubtopic, setPreviewSubtopic] = useState<Subtopic | null>(null);
+  const [previewSpecialItem, setPreviewSpecialItem] = useState<"announcements" | "self-introduction" | "subject-guide" | "pretest" | null>(null);
+  const [previewExpandedTopics, setPreviewExpandedTopics] = useState<Record<number, boolean>>({});
+  const [expandedSubjectOverview, setExpandedSubjectOverview] = useState(true);
+
+  // Simulated Interactive preview comments/forum states
+  const [previewSelfIntroPosts, setPreviewSelfIntroPosts] = useState<any[]>([
+    {
+      id: 1,
+      name: "Alex Mercer",
+      message: "Hey everyone! Excited to learn about subnetting in this class. BSIT 3rd Year here.",
+      createdAt: new Date(Date.now() - 3600000 * 2).toISOString(),
+    },
+    {
+      id: 2,
+      name: "Sophia Rodriguez",
+      message: "Hi class! Looking forward to the hands-on lab activities.",
+      createdAt: new Date(Date.now() - 3600000).toISOString(),
+    }
+  ]);
+  const [previewSelfIntroMsg, setPreviewSelfIntroMsg] = useState("");
+
+  const [previewForumPosts, setPreviewForumPosts] = useState<any[]>([
+    {
+      id: 1,
+      name: "Alex Mercer",
+      role: "Student",
+      message: "Can someone explain why the network boundary for a /26 mask is 64? I'm trying to do Task 2.",
+      createdAt: new Date(Date.now() - 3600000).toISOString(),
+    },
+    {
+      id: 2,
+      name: "Prof. Jake (Simulated)",
+      role: "Professor",
+      message: "Hi Alex! A /26 mask has 26 network bits, meaning the last octet has 2 subnet bits (128 + 64 = 192). This splits the last octet into sizes of 64. So the boundaries are at multiples of 64: 0, 64, 128, 192.",
+      createdAt: new Date(Date.now() - 1800000).toISOString(),
+    }
+  ]);
+  const [previewForumMsg, setPreviewForumMsg] = useState("");
 
   // Input states for creation
   const [newModuleTitle, setNewModuleTitle] = useState("");
@@ -163,12 +805,13 @@ export default function ProfessorModules() {
         const res = await fetch("/api/modules");
         const data = await res.json();
         if (data.success && data.modules) {
-          setModules(data.modules);
-          if (data.modules.length > 0) {
-            setCurrentModuleId(data.modules[0].id);
+          const processed = ensureInteractiveActivity(data.modules);
+          setModules(processed);
+          if (processed.length > 0) {
+            setCurrentModuleId(processed[0].id);
           }
           try {
-            localStorage.setItem("professor_course_modules", JSON.stringify(data.modules));
+            localStorage.setItem("professor_course_modules", JSON.stringify(processed));
           } catch (err) {
             console.warn("Storage quota exceeded, could not write to localStorage:", err);
           }
@@ -188,9 +831,10 @@ export default function ProfessorModules() {
       if (stored) {
         try {
           const parsed = JSON.parse(stored);
-          setModules(parsed);
-          if (parsed.length > 0) {
-            setCurrentModuleId(parsed[0].id);
+          const processed = ensureInteractiveActivity(parsed);
+          setModules(processed);
+          if (processed.length > 0) {
+            setCurrentModuleId(processed[0].id);
           }
         } catch (e) {
           setModules(DEFAULT_MODULES);
@@ -217,9 +861,11 @@ export default function ProfessorModules() {
       if (activeModule && activeModule.topics.length > 0) {
         setPreviewTopic(activeModule.topics[0]);
         setPreviewSubtopic(null);
+        setPreviewSpecialItem(null);
       } else {
         setPreviewTopic(null);
         setPreviewSubtopic(null);
+        setPreviewSpecialItem(null);
       }
     }
   }, [isPreviewMode, currentModuleId, modules]);
@@ -232,11 +878,22 @@ export default function ProfessorModules() {
     } catch (err) {
       console.warn("Storage quota exceeded, could not write to localStorage:", err);
     }
+
+    const strippedForBackend = updated.map((mod, idx) => {
+      if (idx === 0) {
+        return {
+          ...mod,
+          topics: mod.topics.filter(t => t.id !== 888888 && t.id !== 999999)
+        };
+      }
+      return mod;
+    });
+
     try {
       await fetch("/api/modules", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ modules: updated })
+        body: JSON.stringify({ modules: strippedForBackend })
       });
     } catch (error) {
       console.error("Error saving modules via API:", error);
@@ -1156,6 +1813,198 @@ export default function ProfessorModules() {
       }, 0),
     0
   );
+  const renderPreviewSpecialWorkspaceItem = () => {
+    if (previewSpecialItem === "announcements") {
+      return (
+        <div className="flex-grow flex flex-col h-full animate-scaleIn">
+          <div className="border-b border-brand-border/40 pb-2 mb-4">
+            <span className="text-[9px] text-brand-cyan uppercase tracking-wider font-semibold">📢 General announcements</span>
+            <h2 className="text-sm font-bold text-brand-text mt-0.5">Subject Announcements</h2>
+          </div>
+          <div className="flex flex-col gap-3 overflow-y-auto max-h-[260px] pr-1.5">
+            <div className="bg-brand-bg/40 border border-brand-border/30 rounded-2xl p-4 shadow-sm flex flex-col gap-2">
+              <div className="flex justify-between items-center border-b border-brand-border/20 pb-2">
+                <h4 className="font-bold text-brand-cyan text-xs">Welcome to Networking 1! 🚀</h4>
+                <span className="text-[9px] text-brand-muted font-mono bg-brand-bg border border-brand-border/40 px-2 py-0.5 rounded">June 15, 2026</span>
+              </div>
+              <p className="text-[11px] text-brand-text/90 leading-relaxed">
+                Hello class! Welcome to our gamified networking lab. To get started, please make sure you verify your registration details and then take the Module 1 Pre-test. This will unlock the study guides, lecture readings, and the interactive IP subnetting challenge! Let's master subnetting together.
+              </p>
+            </div>
+            <div className="bg-brand-bg/40 border border-brand-border/30 rounded-2xl p-4 shadow-sm flex flex-col gap-2">
+              <div className="flex justify-between items-center border-b border-brand-border/20 pb-2">
+                <h4 className="font-bold text-brand-cyan text-xs">First Lab Exercise Available 💻</h4>
+                <span className="text-[9px] text-brand-muted font-mono bg-brand-bg border border-brand-border/40 px-2 py-0.5 rounded">June 18, 2026</span>
+              </div>
+              <p className="text-[11px] text-brand-text/90 leading-relaxed">
+                The VLSM and ANDing interactive lab tasks are now active. Remember that you must review the lecture materials in 'Subnetting in the IPv6 Era' and participate in the module discussion board before attempting the exercises. Scrolling to the bottom of the module discussion will unlock the interactive task!
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (previewSpecialItem === "subject-guide") {
+      return (
+        <div className="flex-grow flex flex-col h-full animate-scaleIn">
+          <div className="border-b border-brand-border/40 pb-2 mb-4">
+            <span className="text-[9px] text-brand-cyan uppercase tracking-wider font-semibold">📄 Subject Information</span>
+            <h2 className="text-sm font-bold text-brand-text mt-0.5">[MUST READ] Subject Guide</h2>
+          </div>
+          <div className="flex flex-col gap-4 overflow-y-auto max-h-[260px] pr-1.5 leading-relaxed">
+            <div className="bg-brand-bg/30 border border-brand-border/40 rounded-2xl p-4 flex flex-col gap-2">
+              <h3 className="font-bold text-xs text-brand-cyan border-b border-brand-border/30 pb-1.5">Course Overview & Syllabus</h3>
+              <p className="text-[11px] text-brand-text/90 leading-relaxed">
+                This subject introduces fundamental concepts of computer networking, IP address structures, subnet masks, variable length subnet masking (VLSM), and binary ANDing logic. Students will engage in gamified interactive exercises to test their subnetting and network anatomy skills.
+              </p>
+
+              <h4 className="font-bold text-[10px] text-brand-text mt-1">Syllabus Breakdown:</h4>
+              <ul className="list-disc pl-4 text-[11px] text-brand-muted flex flex-col gap-0.5">
+                <li>Module 1: Introduction of Subnetting (FLSM, VLSM, Binary ANDing, IPv6 Era)</li>
+                <li>Module 2: Routing Protocols & Local Area Networks</li>
+              </ul>
+            </div>
+
+            <div className="bg-brand-bg/30 border border-brand-border/40 rounded-2xl p-4 flex flex-col gap-2">
+              <h3 className="font-bold text-xs text-brand-cyan border-b border-brand-border/30 pb-1.5">Grading Policy</h3>
+              <div className="grid grid-cols-2 gap-2 text-[11px]">
+                <div className="flex justify-between border-b border-brand-border/15 pb-0.5">
+                  <span className="text-brand-muted">Pre-tests:</span>
+                  <span className="font-bold text-brand-text">20%</span>
+                </div>
+                <div className="flex justify-between border-b border-brand-border/15 pb-0.5">
+                  <span className="text-brand-muted">Interactive Labs:</span>
+                  <span className="font-bold text-brand-text">40%</span>
+                </div>
+                <div className="flex justify-between border-b border-brand-border/15 pb-0.5">
+                  <span className="text-brand-muted">Quizzes:</span>
+                  <span className="font-bold text-brand-text">30%</span>
+                </div>
+                <div className="flex justify-between border-b border-brand-border/15 pb-0.5">
+                  <span className="text-brand-muted">Forums Participation:</span>
+                  <span className="font-bold text-brand-text">10%</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-brand-bg/30 border border-brand-border/40 rounded-2xl p-4 flex flex-col gap-2">
+              <h3 className="font-bold text-xs text-brand-cyan border-b border-brand-border/30 pb-1.5">Rules of Conduct</h3>
+              <p className="text-[11px] text-brand-text/90 leading-relaxed">
+                Respectful communication is strictly prohibited on all discussion boards. Cheating or distributing direct solutions to interactive tasks is prohibited. Working together to troubleshoot topologies is welcomed!
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (previewSpecialItem === "self-introduction") {
+      return (
+        <div className="flex-grow flex flex-col h-full animate-scaleIn">
+          <div className="border-b border-brand-border/40 pb-2 mb-4">
+            <span className="text-[9px] text-brand-cyan uppercase tracking-wider font-semibold">👋 Class Introductions</span>
+            <h2 className="text-sm font-bold text-brand-text mt-0.5">Self-introduction Board</h2>
+            <p className="text-brand-muted text-[10px] mt-0.5">Say hello to your fellow classmates! Share your name, program, and hobbies.</p>
+          </div>
+
+          {/* Chat area */}
+          <div className="flex-grow overflow-y-auto max-h-[220px] border border-brand-border/40 bg-brand-bg/25 rounded-2xl p-3 flex flex-col gap-2.5 scrollbar-thin mb-3">
+            {previewSelfIntroPosts.map((post) => (
+              <div key={post.id} className="bg-brand-bg/50 border border-brand-border/35 rounded-xl p-2.5 flex gap-2.5 animate-scaleIn">
+                <div className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 bg-gradient-to-br from-brand-cyan to-blue-600 text-brand-bg select-none">
+                  {getAvatarInitials(post.name)}
+                </div>
+                <div className="flex-grow flex flex-col gap-0.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-bold text-brand-text">{post.name}</span>
+                    <span className="text-[8px] text-brand-muted font-mono">{new Date(post.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>
+                  <p className="text-[11px] text-brand-text/90 leading-relaxed whitespace-pre-wrap">{post.message}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Form */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!previewSelfIntroMsg.trim()) return;
+              const newPost = {
+                id: Date.now(),
+                name: "Professor (You)",
+                message: previewSelfIntroMsg.trim(),
+                createdAt: new Date().toISOString()
+              };
+              setPreviewSelfIntroPosts([...previewSelfIntroPosts, newPost]);
+              setPreviewSelfIntroMsg("");
+            }}
+            className="flex gap-2 shrink-0"
+          >
+            <input
+              type="text"
+              value={previewSelfIntroMsg}
+              onChange={(e) => setPreviewSelfIntroMsg(e.target.value)}
+              placeholder="Type your simulated introduction message..."
+              className="flex-grow bg-brand-bg/50 border border-brand-border/40 focus:border-brand-cyan focus:outline-none rounded-xl px-3 py-2 text-xs text-brand-text placeholder-brand-muted/70"
+            />
+            <button
+              type="submit"
+              disabled={!previewSelfIntroMsg.trim()}
+              className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan-hover disabled:opacity-50 disabled:cursor-not-allowed text-brand-bg font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md cursor-pointer shrink-0"
+            >
+              Post 👋
+            </button>
+          </form>
+        </div>
+      );
+    }
+
+    if (previewSpecialItem === "pretest" && selectedModule && selectedModule.pretest) {
+      return (
+        <div className="flex-grow flex flex-col h-full animate-scaleIn">
+          <div className="border-b border-brand-border/40 pb-2 mb-4">
+            <span className="text-[9px] text-brand-cyan uppercase tracking-wider font-semibold">📝 Student Preview Simulation</span>
+            <h2 className="text-sm font-bold text-brand-text mt-0.5">Module Pre-test: {selectedModule.title}</h2>
+            <p className="text-brand-muted text-[10px] mt-0.5">
+              This is a simulation of the pre-test questions configured for this module.
+            </p>
+          </div>
+          <div className="flex flex-col gap-3 overflow-y-auto max-h-[220px] pr-1.5 scrollbar-thin">
+            {selectedModule.pretest.length === 0 ? (
+              <p className="text-xs text-brand-muted italic">No pretest questions configured yet.</p>
+            ) : (
+              selectedModule.pretest.map((q, idx) => (
+                <div key={idx} className="bg-brand-bg/15 border border-brand-border/20 rounded-xl p-3.5 flex flex-col gap-2.5 animate-scaleIn">
+                  <h4 className="font-bold text-[10px] text-brand-cyan uppercase tracking-wider">Question {idx + 1}</h4>
+                  <p className="text-xs font-semibold text-brand-text leading-snug">{q.question}</p>
+                  <div className="grid grid-cols-1 gap-2 mt-1">
+                    {q.options.map((opt, oIdx) => (
+                      <div
+                        key={oIdx}
+                        className={`text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center border transition-all ${
+                          q.correctAnswer === oIdx
+                            ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 font-bold"
+                            : "bg-brand-card/50 border-brand-border/45 text-brand-text/90"
+                        }`}
+                      >
+                        <span className="font-bold mr-2">{String.fromCharCode(65 + oIdx)}.</span>
+                        {opt}
+                        {q.correctAnswer === oIdx && <span className="ml-auto text-[8px] uppercase font-bold text-emerald-400">Correct Answer</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    return null;
+  };
 
   return (
     <div className="min-h-screen bg-brand-bg pl-64 flex flex-col">
@@ -2460,71 +3309,203 @@ export default function ProfessorModules() {
                     <>
                       {/* STUDENT PREVIEW MODE */}
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4 items-start">
-                        
                         {/* Simulated Left Navigation Tree */}
-                        <div className="md:col-span-1 bg-brand-bg/60 border border-brand-border rounded-xl p-3 flex flex-col gap-2 max-h-[380px] overflow-y-auto shadow-inner">
+                        <div className="md:col-span-1 bg-brand-bg/60 border border-brand-border rounded-xl p-3 flex flex-col gap-3 shadow-inner">
                           <span className="text-[9px] uppercase font-bold text-brand-cyan px-2.5 mb-1.5">
                             Outline Navigation
                           </span>
-                          {selectedModule.topics.length === 0 ? (
-                            <div className="text-[10px] text-brand-muted/70 px-2.5 py-1 italic">
-                              No topics outlined yet
-                            </div>
-                          ) : (
-                            selectedModule.topics.map((t) => {
-                              const isTopicSelected = previewTopic?.id === t.id && !previewSubtopic;
-                              const hasSubtopics = t.subtopics && t.subtopics.length > 0;
-                              
-                              return (
-                                <div key={t.id} className="flex flex-col gap-1">
-                                  <button
-                                    onClick={() => {
-                                      setPreviewTopic(t);
-                                      setPreviewSubtopic(null);
-                                    }}
-                                    className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs truncate transition-all ${
-                                      isTopicSelected
-                                        ? "bg-brand-cyan text-brand-bg font-bold shadow-sm"
-                                        : previewTopic?.id === t.id
-                                          ? "bg-brand-cyan/10 text-brand-text font-semibold border border-brand-cyan/20"
-                                          : "text-brand-muted hover:text-brand-text hover:bg-brand-bg/40"
+
+                          {/* Subject Overview Accordion */}
+                          <div className="border border-brand-border/40 rounded-xl overflow-hidden">
+                            <button
+                              onClick={() => {
+                                setExpandedSubjectOverview(!expandedSubjectOverview);
+                                setPreviewSpecialItem("announcements");
+                                setPreviewTopic(null);
+                                setPreviewSubtopic(null);
+                              }}
+                              className={`w-full px-3 py-2.5 flex items-center justify-between text-left transition-colors border-b border-brand-border/20 hover:bg-brand-bg/85 ${previewSpecialItem !== null
+                                  ? "bg-brand-cyan/15 text-brand-cyan font-bold border-l-2 border-l-brand-cyan"
+                                  : "bg-brand-bg/50 text-brand-text"
+                                }`}
+                            >
+                              <div className="flex-grow min-w-0 pr-2">
+                                <span className={`text-[9px] uppercase tracking-wider font-semibold ${previewSpecialItem !== null ? "text-brand-cyan" : "text-brand-cyan/70"}`}>
+                                  General
+                                </span>
+                                <h4 className="text-xs font-bold mt-0.5 whitespace-normal break-words leading-tight">Subject Overview</h4>
+                              </div>
+                              <span className="text-brand-muted shrink-0">
+                                {expandedSubjectOverview ? (
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m18 15-6-6-6 6" /></svg>
+                                ) : (
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+                                )}
+                              </span>
+                            </button>
+
+                            {expandedSubjectOverview && (
+                              <div className="p-1.5 flex flex-col gap-1 bg-brand-card/30">
+                                {/* Announcements */}
+                                <button
+                                  onClick={() => {
+                                    setPreviewSpecialItem("announcements");
+                                    setPreviewTopic(null);
+                                    setPreviewSubtopic(null);
+                                  }}
+                                  className={`w-full text-left px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1.5 ${previewSpecialItem === "announcements"
+                                      ? "bg-brand-cyan text-brand-bg font-bold shadow-sm"
+                                      : "text-brand-muted hover:text-brand-text hover:bg-brand-bg/40"
                                     }`}
-                                  >
-                                    Topic: {t.title}
-                                  </button>
-                                  
-                                  {hasSubtopics && previewTopic?.id === t.id && (
-                                    <div className="pl-3 border-l border-brand-border/40 ml-3 flex flex-col gap-1 py-0.5">
-                                      {t.subtopics!.map((sub) => {
-                                        const isSubSelected = previewSubtopic?.id === sub.id;
-                                        return (
-                                          <button
-                                            key={sub.id}
-                                            onClick={() => {
-                                              setPreviewTopic(t);
-                                              setPreviewSubtopic(sub);
-                                            }}
-                                            className={`w-full text-left px-2 py-1 rounded text-[10px] truncate transition-colors ${
-                                              isSubSelected
-                                                ? "bg-brand-cyan text-brand-bg font-bold shadow-sm"
-                                                : "text-brand-muted hover:text-brand-text hover:bg-brand-bg/20"
-                                            }`}
-                                          >
-                                            • {sub.title}
-                                          </button>
-                                        );
-                                      })}
-                                    </div>
-                                  )}
+                                >
+                                  <span>📢</span>
+                                  <span>Announcements</span>
+                                </button>
+
+                                {/* Self-introduction */}
+                                <button
+                                  onClick={() => {
+                                    setPreviewSpecialItem("self-introduction");
+                                    setPreviewTopic(null);
+                                    setPreviewSubtopic(null);
+                                  }}
+                                  className={`w-full text-left px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1.5 ${previewSpecialItem === "self-introduction"
+                                      ? "bg-brand-cyan text-brand-bg font-bold shadow-sm"
+                                      : "text-brand-muted hover:text-brand-text hover:bg-brand-bg/40"
+                                    }`}
+                                >
+                                  <span>👋</span>
+                                  <span>Self-introduction</span>
+                                </button>
+
+                                {/* Subject Guide */}
+                                <button
+                                  onClick={() => {
+                                    setPreviewSpecialItem("subject-guide");
+                                    setPreviewTopic(null);
+                                    setPreviewSubtopic(null);
+                                  }}
+                                  className={`w-full text-left px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1.5 ${previewSpecialItem === "subject-guide"
+                                      ? "bg-brand-cyan text-brand-bg font-bold shadow-sm"
+                                      : "text-brand-muted hover:text-brand-text hover:bg-brand-bg/40"
+                                    }`}
+                                >
+                                  <span>📄</span>
+                                  <span>[MUST READ] Guide</span>
+                                </button>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Module Topics Box container */}
+                          <div className="border border-brand-border/40 rounded-xl overflow-hidden">
+                            <div className="w-full px-3 py-2 bg-brand-bg/50 border-b border-brand-border/20 text-brand-text">
+                              <span className="text-[8px] uppercase tracking-wider font-semibold text-brand-cyan/70">Module Contents</span>
+                              <h4 className="text-xs font-bold mt-0.5 leading-tight">{selectedModule.title}</h4>
+                            </div>
+                            <div className="p-1.5 flex flex-col gap-1 bg-brand-card/30">
+                              {selectedModule.pretest && selectedModule.pretest.length > 0 && (
+                                <button
+                                  onClick={() => {
+                                    setPreviewSpecialItem("pretest");
+                                    setPreviewTopic(null);
+                                    setPreviewSubtopic(null);
+                                  }}
+                                  className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                    previewSpecialItem === "pretest"
+                                      ? "bg-brand-cyan text-brand-bg font-bold shadow-sm"
+                                      : "text-brand-muted hover:text-brand-text hover:bg-brand-bg/40"
+                                  }`}
+                                >
+                                  <span>📝</span>
+                                  <span>Module Pre-test</span>
+                                </button>
+                              )}
+
+                              {selectedModule.topics.length === 0 ? (
+                                <div className="text-[10px] text-brand-muted/70 px-2.5 py-1 italic">
+                                  No topics outlined yet
                                 </div>
-                              );
-                            })
-                          )}
+                              ) : (
+                                selectedModule.topics.map((t) => {
+                                  const isTopicSelected = previewTopic?.id === t.id && !previewSubtopic && previewSpecialItem === null;
+                                  const hasSubtopics = t.subtopics && t.subtopics.length > 0;
+                                  const isExpanded = previewExpandedTopics[t.id] === true;
+                                  
+                                  return (
+                                    <div key={t.id} className="flex flex-col gap-1">
+                                      <div
+                                        className={`w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer transition-all ${
+                                          isTopicSelected
+                                            ? "bg-brand-cyan text-brand-bg font-bold shadow-sm"
+                                            : (previewTopic?.id === t.id && previewSpecialItem === null)
+                                              ? "bg-brand-cyan/10 text-brand-text font-semibold border border-brand-cyan/20"
+                                              : "text-brand-muted hover:text-brand-text hover:bg-brand-bg/40"
+                                        }`}
+                                        onClick={() => {
+                                          setPreviewTopic(t);
+                                          setPreviewSubtopic(null);
+                                          setPreviewSpecialItem(null);
+                                          if (hasSubtopics) {
+                                            setPreviewExpandedTopics(prev => ({ ...prev, [t.id]: true }));
+                                          }
+                                        }}
+                                      >
+                                        <span className="text-xs truncate flex-grow">Topic: {t.title}</span>
+                                        {hasSubtopics && (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setPreviewExpandedTopics(prev => ({ ...prev, [t.id]: !prev[t.id] }));
+                                            }}
+                                            className={`p-0.5 shrink-0 ${isTopicSelected ? 'text-brand-bg hover:text-brand-bg/80' : 'text-brand-muted hover:text-brand-text'}`}
+                                          >
+                                            {isExpanded ? (
+                                              <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m18 15-6-6-6 6" /></svg>
+                                            ) : (
+                                              <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+                                            )}
+                                          </button>
+                                        )}
+                                      </div>
+                                      
+                                      {hasSubtopics && isExpanded && (
+                                        <div className="pl-3 border-l border-brand-border/40 ml-3 flex flex-col gap-1 py-0.5">
+                                          {t.subtopics!.map((sub) => {
+                                            const isSubSelected = previewSubtopic?.id === sub.id && previewSpecialItem === null;
+                                            return (
+                                              <button
+                                                key={sub.id}
+                                                onClick={() => {
+                                                  setPreviewTopic(t);
+                                                  setPreviewSubtopic(sub);
+                                                  setPreviewSpecialItem(null);
+                                                }}
+                                                className={`w-full text-left px-2 py-1 rounded text-[10px] truncate transition-colors ${
+                                                  isSubSelected
+                                                    ? "bg-brand-cyan text-brand-bg font-bold shadow-sm"
+                                                    : "text-brand-muted hover:text-brand-text hover:bg-brand-bg/20"
+                                                }`}
+                                              >
+                                                • {sub.title}
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </div>
+                          </div>
                         </div>
 
                         {/* Simulated Right Content Frame */}
                         <div className="md:col-span-2 bg-brand-bg/20 border border-brand-border rounded-xl p-4 min-h-[320px] flex flex-col shadow-sm">
-                          {previewTopic ? (
+                          {previewSpecialItem !== null ? (
+                            renderPreviewSpecialWorkspaceItem()
+                          ) : previewTopic ? (
                             <>
                               {/* Content Header */}
                               <div className="border-b border-brand-border/20 pb-2 mb-4">
@@ -2537,7 +3518,107 @@ export default function ProfessorModules() {
                               </div>
 
                               {/* Material Frame Output */}
-                              {((previewSubtopic ? previewSubtopic.materials : previewTopic.materials) || []).length === 0 ? (
+                              {previewTopic.id === 999999 ? (
+                                <InteractiveSubnettingActivity
+                                  onComplete={() => {
+                                    showAlert("Preview Completed", "Simulation complete! In student mode, this marks the activity as finished.");
+                                  }}
+                                  isCompleted={false}
+                                  handleSelectNextTopic={() => {
+                                    showAlert("Navigation Check", "In student mode, this would advance to the next module/topic.");
+                                  }}
+                                  moduleId={selectedModule.id}
+                                />
+                              ) : previewTopic.id === 888888 ? (
+                                // Render Simulated Discussion Forum
+                                <div className="flex-grow flex flex-col h-full animate-scaleIn">
+                                  <p className="text-brand-muted text-[11px] mb-2">
+                                    Ask questions, share subnetting tips, and collaborate on this module's topics.
+                                  </p>
+
+                                  {/* Scrollable chat container */}
+                                  <div
+                                    className="flex-grow overflow-y-auto max-h-[220px] border border-brand-border/40 bg-brand-bg/25 rounded-2xl p-3 flex flex-col gap-2.5 scrollbar-thin mb-3"
+                                  >
+                                    {previewForumPosts.map((post) => {
+                                      const isMsgWarning = post.isWarning === true;
+                                      const isMsgModerator = post.role === "Professor" || post.role === "Admin";
+                                      const displayAuthorName = post.name;
+                                      return (
+                                        <div
+                                          key={post.id}
+                                          className={`border rounded-xl p-2.5 flex gap-2.5 animate-scaleIn transition-all ${
+                                            isMsgWarning
+                                              ? "bg-amber-500/5 border-amber-500/25 border-l-4 border-l-amber-500"
+                                              : "bg-brand-bg/50 border border-brand-border/35"
+                                          }`}
+                                        >
+                                          <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 text-brand-bg select-none bg-gradient-to-br ${
+                                            isMsgWarning
+                                              ? "from-amber-500 to-yellow-600"
+                                              : isMsgModerator
+                                                ? "from-emerald-400 to-teal-600"
+                                                : "from-brand-cyan to-blue-600"
+                                          }`}>
+                                            {getAvatarInitials(displayAuthorName)}
+                                          </div>
+                                          <div className="flex-grow flex flex-col gap-0.5">
+                                            <div className="flex items-center gap-1.5">
+                                              <span className="text-[11px] font-bold text-brand-text">{displayAuthorName}</span>
+                                              <span className={`text-[8px] font-extrabold px-1 py-0.2 rounded uppercase select-none ${
+                                                isMsgModerator
+                                                  ? "bg-brand-cyan/15 text-brand-cyan border border-brand-cyan/30"
+                                                  : "bg-brand-bg border border-brand-border/40 text-brand-muted"
+                                              }`}>
+                                                {post.role}
+                                              </span>
+                                              <span className="text-[8px] text-brand-muted font-mono">
+                                                {new Date(post.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                              </span>
+                                            </div>
+                                            <p className="text-[11px] whitespace-pre-wrap leading-relaxed text-brand-text/90">
+                                              {post.message}
+                                            </p>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+
+                                  {/* Input Form */}
+                                  <form
+                                    onSubmit={(e) => {
+                                      e.preventDefault();
+                                      if (!previewForumMsg.trim()) return;
+                                      const newPost = {
+                                        id: Date.now(),
+                                        name: "Professor (You)",
+                                        role: "Professor",
+                                        message: previewForumMsg.trim(),
+                                        createdAt: new Date().toISOString()
+                                      };
+                                      setPreviewForumPosts([...previewForumPosts, newPost]);
+                                      setPreviewForumMsg("");
+                                    }}
+                                    className="flex gap-2 shrink-0"
+                                  >
+                                    <input
+                                      type="text"
+                                      value={previewForumMsg}
+                                      onChange={(e) => setPreviewForumMsg(e.target.value)}
+                                      placeholder="Post a simulated message to the discussion..."
+                                      className="flex-grow bg-brand-bg/50 border border-brand-border/40 focus:border-brand-cyan focus:outline-none rounded-xl px-3 py-2 text-xs text-brand-text placeholder-brand-muted/70"
+                                    />
+                                    <button
+                                      type="submit"
+                                      disabled={!previewForumMsg.trim()}
+                                      className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan-hover disabled:opacity-50 disabled:cursor-not-allowed text-brand-bg font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md cursor-pointer shrink-0"
+                                    >
+                                      Post
+                                    </button>
+                                  </form>
+                                </div>
+                              ) : ((previewSubtopic ? previewSubtopic.materials : previewTopic.materials) || []).length === 0 ? (
                                 <div className="flex-grow flex flex-col items-center justify-center text-center p-6 border border-dashed border-brand-border/30 rounded-xl">
                                   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-brand-muted mb-2"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/><path d="M6 6h10M6 10h10"/></svg>
                                   <span className="text-xs font-bold">No Materials Posted</span>

@@ -11,6 +11,7 @@ export default function Sidebar({ activePath }: { activePath: string }) {
   const [pendingCount, setPendingCount] = useState(0);
   const [currentUserStatus, setCurrentUserStatus] = useState<string>("pending");
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
     // Check initial preference on mount from localStorage
@@ -33,6 +34,11 @@ export default function Sidebar({ activePath }: { activePath: string }) {
       document.body.classList.remove("sidebar-collapsed");
     }
 
+    const timer = setTimeout(() => {
+      setIsMounted(true);
+      document.body.classList.remove("preload");
+    }, 50);
+
     // Load user identity
     const savedName = localStorage.getItem('userName');
     const savedRole = localStorage.getItem('userRole');
@@ -49,7 +55,10 @@ export default function Sidebar({ activePath }: { activePath: string }) {
       setProfilePic(pic);
     };
     window.addEventListener("profilePicUpdated", handlePicUpdate);
-    return () => window.removeEventListener("profilePicUpdated", handlePicUpdate);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("profilePicUpdated", handlePicUpdate);
+    };
   }, []);
 
   useEffect(() => {
@@ -152,45 +161,39 @@ export default function Sidebar({ activePath }: { activePath: string }) {
   };
 
   return (
-    <aside className={`bg-brand-bg border-r border-brand-border h-screen flex flex-col fixed left-0 top-0 text-sm overflow-hidden z-50 transition-all duration-300 ${isCollapsed ? 'w-20' : 'w-64'}`}>
-      <div className={`p-4 pb-3 border-b border-brand-border/30 flex flex-col ${isCollapsed ? 'items-center gap-3' : 'gap-3'}`}>
-        <div className={`flex items-center text-xl font-bold tracking-tight text-brand-text w-full ${isCollapsed ? 'justify-center' : 'justify-between gap-2'}`}>
-          <div className={`flex items-center gap-2 truncate ${isCollapsed ? 'justify-center' : ''}`}>
+    <aside className={`bg-brand-bg border-r border-brand-border h-screen flex flex-col fixed left-0 top-0 text-sm overflow-hidden z-50 ${
+      isMounted ? 'transition-all duration-300' : ''
+    } ${isCollapsed ? 'w-20' : 'w-64'}`}>
+      <div className={`pb-3 border-b border-brand-border/30 flex flex-col gap-3 ${
+        isMounted ? 'transition-all duration-300' : ''
+      } ${
+        isCollapsed ? 'p-4 px-0 items-center' : 'p-4 items-stretch'
+      }`}>
+        <div className={`flex items-center text-xl font-bold tracking-tight text-brand-text w-full overflow-hidden ${
+          isCollapsed ? 'justify-center' : 'justify-between gap-2'
+        }`}>
+          <div className={`flex items-center shrink-0 ${
+            isCollapsed ? 'gap-0' : 'gap-2'
+          }`}>
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-brand-cyan shrink-0"><path d="M12 2v20"/><path d="m2 12 h20"/><path d="m4.93 4.93 14.14 14.14"/><path d="m19.07 4.93-14.14 14.14"/></svg>
-            {!isCollapsed && <span>NetMaster</span>}
+            <span className={`origin-left whitespace-nowrap overflow-hidden ${
+              isMounted ? 'transition-all duration-300' : ''
+            } ${
+              isCollapsed ? 'opacity-0 max-w-0 pointer-events-none' : 'opacity-100 max-w-[150px]'
+            }`}>
+              NetMaster
+            </span>
           </div>
-          {!isCollapsed && (
-            <div className="flex items-center gap-1 shrink-0">
-              <button 
-                type="button"
-                onClick={toggleTheme} 
-                className="p-1.5 rounded-md hover:bg-brand-card text-brand-muted hover:text-brand-text transition-colors cursor-pointer"
-                title="Toggle Theme"
-              >
-                {isDarkMode ? (
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
-                ) : (
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
-                )}
-              </button>
-              <button 
-                type="button"
-                onClick={toggleCollapse} 
-                className="p-1.5 rounded-md hover:bg-brand-card text-brand-muted hover:text-brand-text transition-colors cursor-pointer"
-                title="Collapse Sidebar"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-              </button>
-            </div>
-          )}
-        </div>
-
-        {isCollapsed && (
-          <div className="flex flex-col items-center gap-1.5 w-full border-t border-brand-border/20 pt-2">
+          
+          <div className={`flex items-center gap-1 shrink-0 overflow-hidden ${
+            isMounted ? 'transition-all duration-300' : ''
+          } ${
+            isCollapsed ? 'opacity-0 max-w-0 pointer-events-none' : 'opacity-100 max-w-[100px]'
+          }`}>
             <button 
               type="button"
               onClick={toggleTheme} 
-              className="p-2 rounded-md hover:bg-brand-card text-brand-muted hover:text-brand-text transition-colors cursor-pointer w-8 h-8 flex items-center justify-center"
+              className="p-1.5 rounded-md hover:bg-brand-card text-brand-muted hover:text-brand-text transition-colors cursor-pointer"
               title="Toggle Theme"
             >
               {isDarkMode ? (
@@ -202,46 +205,86 @@ export default function Sidebar({ activePath }: { activePath: string }) {
             <button 
               type="button"
               onClick={toggleCollapse} 
-              className="p-2 rounded-md hover:bg-brand-card text-brand-muted hover:text-brand-text transition-colors cursor-pointer w-8 h-8 flex items-center justify-center"
-              title="Expand Sidebar"
+              className="p-1.5 rounded-md hover:bg-brand-card text-brand-muted hover:text-brand-text transition-colors cursor-pointer"
+              title="Collapse Sidebar"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
             </button>
           </div>
-        )}
+        </div>
 
-        {!isCollapsed && <div className="text-[10px] text-brand-muted tracking-wide mb-1 select-none">Elite Networking</div>}
+        {/* Collapsed actions panel (fades in and expands when collapsed) */}
+        <div className={`overflow-hidden flex flex-col items-center gap-1.5 w-full border-brand-border/20 ${
+          isMounted ? 'transition-all duration-300' : ''
+        } ${
+          isCollapsed 
+            ? 'opacity-100 max-h-20 border-t pt-2 mt-1' 
+            : 'opacity-0 max-h-0 pointer-events-none'
+        }`}>
+          <button 
+            type="button"
+            onClick={toggleTheme} 
+            className="p-2 rounded-md hover:bg-brand-card text-brand-muted hover:text-brand-text transition-colors cursor-pointer w-8 h-8 flex items-center justify-center animate-fadeIn"
+            title="Toggle Theme"
+          >
+            {isDarkMode ? (
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+            )}
+          </button>
+          <button 
+            type="button"
+            onClick={toggleCollapse} 
+            className="p-2 rounded-md hover:bg-brand-card text-brand-muted hover:text-brand-text transition-colors cursor-pointer w-8 h-8 flex items-center justify-center animate-fadeIn"
+            title="Expand Sidebar"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+        </div>
+
+        <div className={`overflow-hidden whitespace-nowrap text-[10px] text-brand-muted tracking-wide mb-1 select-none origin-left ${
+          isMounted ? 'transition-all duration-300' : ''
+        } ${
+          isCollapsed ? 'opacity-0 max-h-0 pointer-events-none' : 'opacity-100 max-h-4'
+        }`}>
+          Elite Networking
+        </div>
         
         {(activePath.includes(`/${userRole?.toLowerCase() || 'student'}`) || activePath.includes('/student') || activePath.includes('/professor')) && (
-          isCollapsed ? (
-            <div className="flex justify-center mt-0.5 w-full">
-              <div className="w-8 h-8 rounded-full border border-brand-cyan overflow-hidden shrink-0 bg-brand-bg flex items-center justify-center shadow-md">
-                {profilePic ? (
-                  <img id="sidebar-profile-pic" src={profilePic} alt="Profile" className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full bg-gradient-to-tr from-brand-muted to-brand-cyan/20"></div>
-                )}
-              </div>
+          <div className={`flex items-center p-2 rounded-md w-full overflow-hidden ${
+            isMounted ? 'transition-all duration-300' : ''
+          } ${
+            isCollapsed 
+              ? 'bg-transparent border-transparent justify-center' 
+              : 'bg-brand-card border border-brand-border gap-2.5 justify-start'
+          }`}>
+            <div className={`w-8 h-8 overflow-hidden shrink-0 bg-brand-bg flex items-center justify-center ${
+              isMounted ? 'transition-all duration-300' : ''
+            } ${
+              isCollapsed ? 'rounded-full border border-brand-cyan shadow-md' : 'rounded border border-brand-border'
+            }`}>
+              {profilePic ? (
+                <img id="sidebar-profile-pic" src={profilePic} alt="Profile" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-tr from-brand-muted to-brand-cyan/20"></div>
+              )}
             </div>
-          ) : (
-            <div className="flex items-center gap-2.5 p-2 bg-brand-card rounded-md border border-brand-border transition-all">
-              <div className="w-8 h-8 rounded border border-brand-border overflow-hidden shrink-0 bg-brand-bg flex items-center justify-center">
-                {profilePic ? (
-                  <img id="sidebar-profile-pic" src={profilePic} alt="Profile" className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full bg-gradient-to-tr from-brand-muted to-brand-cyan/20"></div>
-                )}
-              </div>
-              <div className="flex flex-col min-w-0">
-                <div className="font-bold text-xs truncate max-w-[120px]" title={userName}>{userName}</div>
-                <div className="text-[9px] font-medium text-brand-cyan uppercase tracking-wider">{userRole || "Student"}</div>
-              </div>
+            <div className={`flex flex-col min-w-0 origin-left ${
+              isMounted ? 'transition-all duration-300' : ''
+            } ${
+              isCollapsed ? 'opacity-0 max-w-0 pointer-events-none' : 'opacity-100 max-w-[120px]'
+            }`}>
+              <div className="font-bold text-xs truncate whitespace-nowrap" title={userName}>{userName}</div>
+              <div className="text-[9px] font-medium text-brand-cyan uppercase tracking-wider whitespace-nowrap">{userRole || "Student"}</div>
             </div>
-          )
+          </div>
         )}
       </div>
       
-      <nav className={`flex-1 py-4 space-y-1 ${isCollapsed ? 'flex flex-col items-center w-full' : 'px-3'}`}>
+      <nav className={`flex-1 py-4 space-y-1 ${
+        isMounted ? 'transition-all duration-300' : ''
+      } ${isCollapsed ? 'flex flex-col items-center w-full px-0' : 'px-3'}`}>
         {getMenuItems().map((item) => {
           const isActive = 
             activePath === item.path ||
@@ -269,8 +312,10 @@ export default function Sidebar({ activePath }: { activePath: string }) {
                   alert("This section is locked until your registration is approved by the professor.");
                 }
               }}
-              className={`flex items-center rounded-md font-semibold transition-all relative ${
-                isCollapsed ? 'p-2 justify-center w-10 h-10' : 'justify-between px-3 py-2 w-full'
+              className={`flex items-center rounded-md font-semibold relative ${
+                isMounted ? 'transition-all duration-300' : ''
+              } ${
+                isCollapsed ? 'p-2 justify-center w-10 h-10 mx-auto' : 'px-3 py-2 w-full justify-between'
               } ${
                 isRestricted 
                   ? 'opacity-40 cursor-not-allowed text-brand-muted hover:bg-transparent' 
@@ -279,23 +324,35 @@ export default function Sidebar({ activePath }: { activePath: string }) {
                     : 'text-brand-muted hover:bg-brand-card hover:text-brand-text'
               }`}
             >
-              <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'}`}>
+              <div className={`flex items-center min-w-0 ${
+                isMounted ? 'transition-all duration-300' : ''
+              } ${isCollapsed ? 'gap-0' : 'gap-3'}`}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
                   {item.icon}
                 </svg>
-                {!isCollapsed && <span>{item.name}</span>}
+                <span className={`origin-left whitespace-nowrap overflow-hidden ${
+                  isMounted ? 'transition-all duration-300' : ''
+                } ${
+                  isCollapsed ? 'opacity-0 max-w-0 pointer-events-none' : 'opacity-100 max-w-[150px]'
+                }`}>
+                  {item.name}
+                </span>
               </div>
-              {!isCollapsed && (
-                isRestricted ? (
+              <div className={`overflow-hidden flex items-center justify-center shrink-0 ${
+                isMounted ? 'transition-all duration-300' : ''
+              } ${
+                isCollapsed ? 'opacity-0 max-w-0' : 'opacity-100 max-w-[50px]'
+              }`}>
+                {isRestricted ? (
                   <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-brand-muted"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                 ) : showBadge ? (
                   <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold transition-all ${isActive ? 'bg-brand-bg text-brand-cyan font-extrabold' : 'bg-red-500 text-white animate-pulse'}`}>
                     {pendingCount}
                   </span>
-                ) : null
-              )}
+                ) : null}
+              </div>
               {isCollapsed && showBadge && !isRestricted && (
-                <div className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border border-brand-bg animate-pulse" />
+                <div className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border border-brand-bg animate-pulse animate-fadeIn" />
               )}
             </Link>
           );
@@ -306,12 +363,20 @@ export default function Sidebar({ activePath }: { activePath: string }) {
         <Link 
           href="/login" 
           title={isCollapsed ? "Sign Out" : undefined}
-          className={`flex items-center rounded-md font-medium text-brand-muted hover:bg-brand-card hover:text-red-400 transition-colors ${
-            isCollapsed ? 'p-2 justify-center w-10 h-10' : 'gap-3 px-3 py-1.5 w-full'
+          className={`flex items-center rounded-md font-medium text-brand-muted hover:bg-brand-card hover:text-red-400 ${
+            isMounted ? 'transition-all duration-300' : ''
+          } ${
+            isCollapsed ? 'p-2 justify-center w-10 h-10 mx-auto gap-0' : 'gap-3 px-3 py-1.5 w-full'
           }`}
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-          {!isCollapsed && <span>Sign Out</span>}
+          <span className={`origin-left whitespace-nowrap overflow-hidden ${
+            isMounted ? 'transition-all duration-300' : ''
+          } ${
+            isCollapsed ? 'opacity-0 max-w-0 pointer-events-none' : 'opacity-100 max-w-[150px]'
+          }`}>
+            Sign Out
+          </span>
         </Link>
       </div>
     </aside>

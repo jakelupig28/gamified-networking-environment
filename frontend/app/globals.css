@@ -117,4 +117,10 @@ body {
 
 .sidebar-collapsed .pl-64 {
   padding-left: 5rem !important; /* Equivalent to pl-20 (80px) */
+}
+
+/* Disable transitions on initial page load */
+.preload,
+.preload * {
+  transition: none !important;
 }

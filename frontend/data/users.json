@@ -22,7 +22,7 @@
     "completedPretests": { "1781848568626": true },
     "completedTopics": { "1781848568627": true },
     "watchedVideos": {},
-    "interactiveScores": { "1781848568626": { "vlsm": 6, "anding": 8, "ipv6": 2 } }
+    "interactiveScores": {}
   },
   {
     "id": 1779954541790,
@@ -54,6 +54,6 @@
     "completedPretests": { "1781848568626": true },
     "completedTopics": { "1781848568627": true, "1781848568628": true },
     "watchedVideos": {},
-    "interactiveScores": { "1781848568626": { "vlsm": 8, "anding": 9, "ipv6": 3 } }
+    "interactiveScores": {}
   }
 ]

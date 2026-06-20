@@ -27,7 +27,20 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              try {
+                if (localStorage.getItem("sidebar-collapsed") === "true") {
+                  document.documentElement.classList.add("sidebar-collapsed");
+                }
+              } catch (e) {}
+            `
+          }}
+        />
+      </head>
+      <body className="min-h-full flex flex-col preload">{children}</body>
     </html>
   );
 }

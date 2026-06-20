@@ -210,31 +210,28 @@ export default function DiscussionBoard({ activePath }: { activePath: string }) 
         <div className="flex-grow grid grid-cols-1 lg:grid-cols-4 gap-6 min-h-[500px]">
           
           {/* LEFT PANEL: Channels list */}
-          <div className="lg:col-span-1 bg-brand-card/90 border border-brand-border/60 rounded-2xl p-5 shadow-2xl flex flex-col gap-4 backdrop-blur-md">
+          <div className="lg:col-span-1 bg-gradient-to-b from-brand-card/95 to-brand-card/85 border border-brand-border/50 rounded-2xl p-5 shadow-2xl flex flex-col gap-4 backdrop-blur-md">
             <div>
-              <h3 className="font-bold text-[10px] text-brand-cyan/80 uppercase tracking-widest mb-3 select-none">
+              <h3 className="font-bold text-[10px] text-brand-cyan/90 uppercase tracking-widest mb-3 select-none">
                 Discussion Channels
               </h3>
               
-              <div className="flex flex-col gap-1.5 overflow-y-auto max-h-[450px]">
+              <div className="flex flex-col gap-1.5 overflow-y-auto overflow-x-hidden max-h-[450px]">
                 {/* General Channel */}
                 <button
                   onClick={() => setSelectedChannelId(0)}
-                  className={`w-full text-left px-4 py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-between group cursor-pointer relative overflow-hidden border ${
+                  className={`w-full text-left px-4 py-3.5 rounded-xl text-xs font-bold transition-all duration-200 flex items-start gap-2.5 group cursor-pointer relative overflow-hidden border hover:scale-[1.01] active:scale-[0.99] ${
                     selectedChannelId === 0
-                      ? "bg-gradient-to-r from-brand-cyan/15 to-transparent border-brand-cyan/30 text-brand-cyan font-extrabold"
-                      : "bg-brand-bg/20 border-brand-border/20 text-brand-muted hover:text-brand-text hover:bg-brand-bg/50"
+                      ? "bg-gradient-to-r from-brand-cyan/15 to-brand-cyan/5 border-brand-cyan/40 text-brand-cyan shadow-md shadow-brand-cyan/5"
+                      : "bg-brand-bg/25 border-brand-border/20 text-brand-muted hover:text-brand-text hover:bg-brand-card-light/40 hover:border-brand-border/40"
                   }`}
                 >
-                  <div className="flex items-center gap-2.5">
-                    <span className={selectedChannelId === 0 ? "text-brand-cyan" : "text-brand-muted/70 group-hover:text-brand-text"}>#</span>
-                    <span className="truncate">general-chat</span>
-                  </div>
-                  <div className={`w-1.5 h-1.5 rounded-full bg-brand-cyan transition-all opacity-0 ${selectedChannelId === 0 ? "opacity-100 shadow-glow" : ""}`} />
+                  <span className={`mt-0.5 select-none font-bold text-sm leading-none ${selectedChannelId === 0 ? "text-brand-cyan" : "text-brand-muted/50 group-hover:text-brand-text"}`}>#</span>
+                  <span className="whitespace-normal break-words leading-tight flex-1 text-left">general-chat</span>
                 </button>
 
                 {/* Categories Divider */}
-                <h3 className="font-bold text-[9px] text-brand-muted/70 uppercase tracking-widest mt-5 mb-2 select-none border-b border-brand-border/30 pb-1.5">
+                <h3 className="font-bold text-[9px] text-brand-cyan/60 uppercase tracking-widest mt-6 mb-2 select-none border-b border-brand-border/25 pb-2">
                   Course Modules
                 </h3>
 
@@ -243,17 +240,14 @@ export default function DiscussionBoard({ activePath }: { activePath: string }) 
                   <button
                     key={mod.id}
                     onClick={() => setSelectedChannelId(mod.id)}
-                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-between group cursor-pointer relative overflow-hidden border ${
+                    className={`w-full text-left px-4 py-3.5 rounded-xl text-xs font-bold transition-all duration-200 flex items-start gap-2.5 group cursor-pointer relative overflow-hidden border hover:scale-[1.01] active:scale-[0.99] ${
                       selectedChannelId === mod.id
-                        ? "bg-gradient-to-r from-brand-cyan/15 to-transparent border-brand-cyan/30 text-brand-cyan font-extrabold"
-                        : "bg-brand-bg/20 border-brand-border/20 text-brand-muted hover:text-brand-text hover:bg-brand-bg/50"
+                        ? "bg-gradient-to-r from-brand-cyan/15 to-brand-cyan/5 border-brand-cyan/40 text-brand-cyan shadow-md shadow-brand-cyan/5"
+                        : "bg-brand-bg/25 border-brand-border/20 text-brand-muted hover:text-brand-text hover:bg-brand-card-light/40 hover:border-brand-border/40"
                     }`}
                   >
-                    <div className="flex items-center gap-2.5">
-                      <span className={selectedChannelId === mod.id ? "text-brand-cyan" : "text-brand-muted/70 group-hover:text-brand-text"}>#</span>
-                      <span className="truncate" title={mod.title}>{mod.title}</span>
-                    </div>
-                    <div className={`w-1.5 h-1.5 rounded-full bg-brand-cyan transition-all opacity-0 ${selectedChannelId === mod.id ? "opacity-100 shadow-glow" : ""}`} />
+                    <span className={`mt-0.5 select-none font-bold text-sm leading-none ${selectedChannelId === mod.id ? "text-brand-cyan" : "text-brand-muted/50 group-hover:text-brand-text"}`}>#</span>
+                    <span className="whitespace-normal break-words leading-tight flex-1 text-left">{mod.title}</span>
                   </button>
                 ))}
               </div>
@@ -261,34 +255,36 @@ export default function DiscussionBoard({ activePath }: { activePath: string }) 
           </div>
 
           {/* RIGHT PANEL: Chat Workspace */}
-          <div className="lg:col-span-3 bg-brand-card/90 border border-brand-border/60 rounded-2xl p-6 shadow-2xl flex flex-col min-h-[480px] backdrop-blur-md">
+          <div className="lg:col-span-3 bg-gradient-to-b from-brand-card/95 to-brand-card/85 border border-brand-border/50 rounded-2xl p-6 shadow-2xl flex flex-col min-h-[480px] backdrop-blur-md">
             
             {/* Active Channel Header */}
-            <div className="border-b border-brand-border/45 pb-4 mb-4 shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <span className="text-[9px] text-brand-cyan uppercase tracking-widest font-bold">Active Channel</span>
-                <h2 className="text-xl font-extrabold text-brand-text mt-0.5 flex items-center gap-1.5">
-                  <span>#</span>
-                  {selectedChannelId === 0
-                    ? "general-chat"
-                    : modules.find((m) => m.id === selectedChannelId)?.title || "Module Channel"}
+            <div className="border-b border-brand-border/30 pb-4.5 mb-5 shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="min-w-0 flex-1">
+                <span className="text-[9px] text-brand-cyan uppercase tracking-widest font-extrabold">Active Channel</span>
+                <h2 className="text-xl font-extrabold text-brand-text mt-0.5 flex items-start gap-2 whitespace-normal break-words leading-tight">
+                  <span className="text-brand-cyan/70 select-none">#</span>
+                  <span className="flex-1">
+                    {selectedChannelId === 0
+                      ? "general-chat"
+                      : modules.find((m) => m.id === selectedChannelId)?.title || "Module Channel"}
+                  </span>
                 </h2>
               </div>
 
               {/* Utility Search & Filters */}
-              <div className="flex items-center gap-3 self-end sm:self-auto">
+              <div className="flex items-center gap-3 self-end sm:self-auto shrink-0">
                 {/* Warnings Only Filter Button */}
                 <button
                   type="button"
                   onClick={() => setShowWarningsOnly(!showWarningsOnly)}
-                  className={`px-3 py-1.5 rounded-xl border text-[10px] font-bold flex items-center gap-1.5 transition-all cursor-pointer select-none ${
+                  className={`px-3 py-2 rounded-xl border text-[10px] font-bold flex items-center gap-1.5 transition-all duration-200 cursor-pointer select-none hover:scale-[1.03] active:scale-[0.97] ${
                     showWarningsOnly 
-                      ? "bg-amber-500/20 border-amber-500/40 text-amber-400" 
-                      : "bg-brand-bg/40 border-brand-border/40 text-brand-muted hover:text-brand-text hover:bg-brand-bg/70"
+                      ? "bg-gradient-to-r from-amber-500/20 to-amber-600/10 border-amber-500/40 text-amber-400 shadow-md shadow-amber-500/5 font-extrabold" 
+                      : "bg-brand-bg/40 border-brand-border/35 text-brand-muted hover:text-brand-text hover:bg-brand-bg/75 hover:border-brand-border/50"
                   }`}
                   title="Filter by official warnings and notices"
                 >
-                  <span>⚠️</span> Warnings Only
+                  <span className={showWarningsOnly ? "animate-pulse" : ""}>⚠️</span> Warnings Only
                 </button>
 
                 {/* Real-time search bar */}
@@ -298,9 +294,9 @@ export default function DiscussionBoard({ activePath }: { activePath: string }) 
                     placeholder="Search messages..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full bg-brand-bg/45 border border-brand-border/40 focus:border-brand-cyan/60 focus:outline-none rounded-xl pl-8 pr-7 py-1.5 text-xs text-brand-text placeholder-brand-muted/70 transition-all"
+                    className="w-full bg-brand-bg/40 border border-brand-border/35 focus:border-brand-cyan/60 focus:ring-2 focus:ring-brand-cyan/15 focus:outline-none rounded-xl pl-8.5 pr-7 py-1.5 text-xs text-brand-text placeholder-brand-muted/65 transition-all duration-200"
                   />
-                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="absolute left-2.5 top-1/2 -translate-y-1/2 text-brand-muted"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="absolute left-3 top-1/2 -translate-y-1/2 text-brand-muted"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                   {searchQuery && (
                     <button
                       type="button"
@@ -351,60 +347,60 @@ export default function DiscussionBoard({ activePath }: { activePath: string }) 
                   return (
                     <div key={post.id} className="flex flex-col gap-3">
                       {insertDateHeader && (
-                        <div className="flex items-center gap-3 py-2.5 select-none">
-                          <div className="flex-grow h-[1px] bg-brand-border/20" />
-                          <span className="text-[9px] text-brand-muted/80 font-bold uppercase tracking-widest bg-brand-card border border-brand-border/40 px-3.5 py-1 rounded-full shadow-md">
+                        <div className="flex items-center gap-4 py-3 select-none animate-fadeIn">
+                          <div className="flex-grow h-[1px] bg-gradient-to-r from-transparent to-brand-border/25" />
+                          <span className="text-[9px] text-brand-muted font-mono font-bold uppercase tracking-widest bg-brand-card-light/50 border border-brand-border/30 px-4 py-1.5 rounded-full shadow-lg backdrop-blur-sm">
                             {postDateStr}
                           </span>
-                          <div className="flex-grow h-[1px] bg-brand-border/20" />
+                          <div className="flex-grow h-[1px] bg-gradient-to-l from-transparent to-brand-border/25" />
                         </div>
                       )}
 
                       <div
-                        className={`border rounded-2xl p-4.5 flex gap-4 relative group animate-scaleIn transition-all ${
+                        className={`border rounded-2xl p-4.5 flex gap-4 relative group animate-scaleIn transition-all duration-200 ${
                           isWarning
-                            ? "bg-amber-500/5 border-amber-500/25 border-l-4 border-l-amber-500 hover:border-amber-500/40 hover:bg-amber-500/8 shadow-md shadow-amber-500/5"
-                            : "bg-brand-bg/30 border border-brand-border/35 hover:border-brand-border-hover/65 hover:bg-brand-bg/45"
+                            ? "bg-gradient-to-b from-amber-500/[0.04] to-amber-500/[0.01] border-amber-500/25 border-l-4 border-l-amber-500/80 hover:border-amber-500/40 hover:bg-amber-500/[0.07] hover:scale-[1.002] shadow-md shadow-amber-500/[0.01]"
+                            : "bg-gradient-to-b from-brand-card/40 to-brand-card/15 border-brand-border/35 hover:border-brand-cyan/25 hover:bg-brand-card/60 hover:scale-[1.002] hover:shadow-lg hover:shadow-brand-cyan/[0.01]"
                         }`}
                       >
                         {/* Circular Role-Gradient Avatar */}
-                        <div className={`w-9.5 h-9.5 rounded-full flex items-center justify-center font-extrabold text-xs shrink-0 border select-none ${
+                        <div className={`w-9.5 h-9.5 rounded-full flex items-center justify-center font-extrabold text-xs shrink-0 border select-none transition-all duration-200 group-hover:scale-105 ${
                           isWarning 
-                            ? "bg-gradient-to-br from-amber-500 to-yellow-600 text-brand-bg border-amber-400"
+                            ? "bg-gradient-to-br from-amber-400 to-yellow-600 text-brand-bg border-amber-400/60 ring-2 ring-amber-500/15 group-hover:ring-amber-500/40"
                             : isMsgModerator
-                              ? "bg-gradient-to-br from-emerald-400 to-teal-600 text-brand-bg border-emerald-400"
-                              : "bg-gradient-to-br from-brand-cyan to-blue-600 text-brand-bg border-brand-cyan/40"
+                              ? "bg-gradient-to-br from-emerald-400 to-teal-600 text-brand-bg border-emerald-400/60 ring-2 ring-emerald-500/15 group-hover:ring-emerald-500/40"
+                              : "bg-gradient-to-br from-brand-cyan to-blue-600 text-brand-bg border-brand-cyan/40 ring-2 ring-brand-cyan/15 group-hover:ring-brand-cyan/40"
                         }`}>
                           {getAvatarInitials(displayAuthorName)}
                         </div>
 
                         {/* Message details */}
-                        <div className="flex-grow flex flex-col gap-1.5">
+                        <div className="flex-grow flex flex-col gap-1.5 min-w-0">
                           <div className="flex justify-between items-start gap-4">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-xs font-bold text-brand-text leading-none">{displayAuthorName}</span>
-                              <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded leading-none uppercase select-none ${
+                            <div className="flex items-center gap-2 flex-wrap min-w-0">
+                              <span className="text-xs font-extrabold text-brand-text leading-none">{displayAuthorName}</span>
+                              <span className={`text-[9px] font-bold px-2.5 py-0.5 rounded-full leading-none uppercase select-none ${
                                 isMsgModerator 
-                                  ? "bg-brand-cyan/15 text-brand-cyan border border-brand-cyan/30"
-                                  : "bg-brand-bg border border-brand-border/40 text-brand-muted"
+                                  ? "bg-brand-cyan/10 text-brand-cyan border border-brand-cyan/20"
+                                  : "bg-brand-bg/50 border border-brand-border/30 text-brand-muted"
                               }`}>
                                 {post.role}
                               </span>
                               {isWarning && (
-                                <span className="text-[9px] font-extrabold px-2 py-0.5 rounded leading-none bg-amber-500/15 text-amber-400 border border-amber-500/30 uppercase flex items-center gap-0.5 select-none animate-pulse">
+                                <span className="text-[9px] font-bold px-2.5 py-0.5 rounded-full leading-none bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase flex items-center gap-1 select-none animate-pulse">
                                   <span>⚠️</span> Official Warning
                                 </span>
                               )}
-                              <span className="text-[9px] text-brand-muted font-mono leading-none">
+                              <span className="text-[9px] text-brand-muted/70 font-mono leading-none">
                                 {postDateObject.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                               </span>
                             </div>
 
-                            {/* Deletion button for admins and professors */}
+                            {/* Deletion button for admins and professors (fades in on hover) */}
                             {isUserModerator && (
                               <button
                                 onClick={() => handleDeletePost(post.id)}
-                                className="text-red-400 hover:text-red-500 transition-colors p-1.5 rounded hover:bg-red-500/10 cursor-pointer"
+                                className="text-red-400 hover:text-red-500 hover:scale-105 transition-all p-1.5 rounded-lg hover:bg-red-500/10 cursor-pointer opacity-0 group-hover:opacity-100 focus:opacity-100 duration-200"
                                 title="Delete message"
                               >
                                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
@@ -413,7 +409,7 @@ export default function DiscussionBoard({ activePath }: { activePath: string }) 
                           </div>
 
                           <p className={`text-xs leading-relaxed whitespace-pre-wrap ${
-                            isWarning ? "text-amber-300 font-medium italic" : "text-brand-text/90"
+                            isWarning ? "text-amber-200/90 font-medium italic" : "text-brand-text/90"
                           }`}>
                             {post.message}
                           </p>
@@ -427,7 +423,7 @@ export default function DiscussionBoard({ activePath }: { activePath: string }) 
             </div>
 
             {/* Posting Form */}
-            <form onSubmit={handlePostMessage} className="mt-auto shrink-0 flex flex-col gap-3">
+            <form onSubmit={handlePostMessage} className="mt-auto shrink-0 flex flex-col gap-3.5">
               {postError && (
                 <div className="bg-red-500/10 border border-red-500/30 text-red-400 p-3.5 rounded-2xl text-xs leading-relaxed flex items-start gap-2 animate-scaleIn">
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-red-400 mt-0.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
@@ -435,25 +431,25 @@ export default function DiscussionBoard({ activePath }: { activePath: string }) 
                 </div>
               )}
 
-              <div className="flex flex-col gap-3 w-full">
+              <div className="flex flex-col gap-3.5 w-full">
                 {isUserModerator && (
                   <div className="flex flex-col gap-2.5">
-                    <div className="flex items-center gap-2 select-none">
+                    <div className="flex items-center gap-2.5 select-none">
                       <input
                         type="checkbox"
                         id="isWarningToggle"
                         checked={isWarningChecked}
                         onChange={(e) => setIsWarningChecked(e.target.checked)}
-                        className="w-4 h-4 text-amber-500 bg-brand-bg/50 border-brand-border rounded focus:ring-amber-500 focus:ring-2 cursor-pointer accent-amber-500"
+                        className="w-4.5 h-4.5 text-amber-500 bg-brand-bg/50 border-brand-border rounded focus:ring-amber-500 focus:ring-2 cursor-pointer accent-amber-500 transition-all"
                       />
-                      <label htmlFor="isWarningToggle" className="text-xs font-bold text-amber-400 hover:text-amber-300 transition-colors cursor-pointer flex items-center gap-1">
+                      <label htmlFor="isWarningToggle" className="text-xs font-extrabold text-amber-400 hover:text-amber-300 transition-colors cursor-pointer flex items-center gap-1">
                         <span>⚠️</span> Post as Anonymous Official Warning / Announcement
                       </label>
                     </div>
 
                     {/* Pre-defined Drafts Template Selector */}
                     {isWarningChecked && (
-                      <div className="bg-brand-bg/40 border border-amber-500/20 rounded-2xl p-4 flex flex-col gap-2.5 animate-scaleIn">
+                      <div className="bg-brand-bg/60 border border-brand-border/40 rounded-2xl p-4.5 flex flex-col gap-3 animate-scaleIn shadow-inner">
                         <span className="text-[10px] font-bold text-amber-400 uppercase tracking-widest flex items-center gap-1 select-none">
                           <span>💡</span> Warning Draft Templates (Click to fill)
                         </span>
@@ -466,7 +462,7 @@ export default function DiscussionBoard({ activePath }: { activePath: string }) 
                                 setNewPostMessage(draft.message);
                                 if (postError) setPostError("");
                               }}
-                              className="px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 active:bg-amber-500/30 border border-amber-500/20 hover:border-amber-500/45 text-amber-400 rounded-xl text-xs font-semibold cursor-pointer transition-all"
+                              className="px-3.5 py-2 bg-amber-500/[0.06] hover:bg-amber-500/[0.12] active:scale-95 border border-amber-500/25 hover:border-amber-500/45 text-amber-400 rounded-xl text-xs font-bold cursor-pointer transition-all duration-150 shadow-sm"
                             >
                               {draft.title}
                             </button>
@@ -489,12 +485,20 @@ export default function DiscussionBoard({ activePath }: { activePath: string }) 
                         ? "Enter your official warning/announcement message here (your name will show as Professor/Admin)..." 
                         : "Type a message or share thoughts about what you are learning..."
                     }
-                    className="flex-grow bg-brand-bg/50 border border-brand-border/40 focus:border-brand-cyan focus:outline-none rounded-xl px-4.5 py-3 text-xs text-brand-text placeholder-brand-muted/70 resize-none h-16 min-h-[4rem] leading-relaxed transition-all"
+                    className={`flex-grow bg-brand-bg/40 border focus:outline-none rounded-xl px-4.5 py-3.5 text-xs text-brand-text placeholder-brand-muted/65 resize-none h-20 min-h-[4.5rem] leading-relaxed transition-all duration-200 ${
+                      isWarningChecked
+                        ? "border-amber-500/25 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/15"
+                        : "border-brand-border/40 focus:border-brand-cyan focus:ring-2 focus:ring-brand-cyan/15"
+                    }`}
                   />
                   <button
                     type="submit"
                     disabled={!newPostMessage.trim()}
-                    className="px-6 py-3 bg-brand-cyan hover:bg-brand-cyan-hover disabled:opacity-50 disabled:cursor-not-allowed text-brand-bg font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-md self-end"
+                    className={`px-6 py-3.5 font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all duration-200 cursor-pointer hover:scale-[1.03] active:scale-[0.97] self-end shrink-0 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:shadow-none ${
+                      isWarningChecked
+                        ? "bg-gradient-to-r from-amber-500 to-orange-500 text-brand-bg shadow-md shadow-amber-500/10 hover:from-amber-600 hover:to-orange-600"
+                        : "bg-gradient-to-r from-brand-cyan to-blue-500 text-brand-bg shadow-md shadow-brand-cyan/10 hover:from-brand-cyan-hover hover:to-blue-600"
+                    }`}
                   >
                     Send Message
                   </button>

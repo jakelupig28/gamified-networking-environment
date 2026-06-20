@@ -566,8 +566,15 @@ async function parsePdf(buffer: Buffer, defaultTitle: string): Promise<ParsedMod
   const topics: Topic[] = [];
   let currentTopic: Topic | null = null;
   let textBuffer: string[] = [];
+  let currentParagraph = "";
+  let lastTextEl: any = null;
 
   const flushTextBuffer = () => {
+    if (currentParagraph) {
+      textBuffer.push(currentParagraph.trim());
+      currentParagraph = "";
+    }
+    lastTextEl = null;
     if (textBuffer.length === 0) return;
     const textContent = textBuffer.join('\n\n').trim();
     textBuffer = [];
@@ -581,6 +588,52 @@ async function parsePdf(buffer: Buffer, defaultTitle: string): Promise<ParsedMod
       textStyle: 'normal'
     };
     addMaterialToCurrent(material);
+  };
+
+  const appendToParagraph = (el: any) => {
+    const text = el.text.trim();
+    if (!text) return;
+    
+    if (!currentParagraph) {
+      currentParagraph = text;
+    } else {
+      let shouldStartNew = false;
+      
+      if (lastTextEl) {
+        const gap = lastTextEl.y - el.y;
+        const samePage = lastTextEl.pageNum === el.pageNum;
+        const fontSize = lastTextEl.fontSize || 10;
+        
+        if (!samePage) {
+          // Page boundary: only start new if previous line ends with sentence punctuation
+          const lastChar = currentParagraph.slice(-1);
+          if (/[.!?]/.test(lastChar)) {
+            shouldStartNew = true;
+          }
+        } else if (gap > fontSize * 1.75) {
+          // Significant vertical gap
+          shouldStartNew = true;
+        } else if (currentParagraph.length > 0) {
+          const lastChar = currentParagraph.trim().slice(-1);
+          const isShort = lastTextEl.text.length < 65; // short line typically ends paragraph
+          if (isShort && /[.!?:]/.test(lastChar)) {
+            shouldStartNew = true;
+          }
+        }
+      }
+      
+      if (shouldStartNew) {
+        textBuffer.push(currentParagraph.trim());
+        currentParagraph = text;
+      } else {
+        if (currentParagraph.endsWith('-')) {
+          currentParagraph = currentParagraph.slice(0, -1) + text;
+        } else {
+          currentParagraph += " " + text;
+        }
+      }
+    }
+    lastTextEl = el;
   };
 
   const addMaterialToCurrent = (material: Material) => {
@@ -629,7 +682,7 @@ async function parsePdf(buffer: Buffer, defaultTitle: string): Promise<ParsedMod
         };
         addMaterialToCurrent(videoMaterial);
       } else {
-        textBuffer.push(lineText);
+        appendToParagraph(el);
       }
     }
   }

@@ -3,7 +3,7 @@
 :root {
   --background: #0A1118;
   --foreground: #e2e8f0;
-  
+
   --color-brand-bg-var: #0A1118;
   --color-brand-card-var: #121b27;
   --color-brand-card-light-var: #1c2836;
@@ -18,7 +18,7 @@
 :root.light-mode {
   --background: #f8fafc;
   --foreground: #0f172a;
-  
+
   --color-brand-bg-var: #f8fafc;
   --color-brand-card-var: #ffffff;
   --color-brand-card-light-var: #f1f5f9;
@@ -53,24 +53,68 @@ body {
 }
 
 @keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-15px); }
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-15px);
+  }
 }
 
-.animate-float-1 { animation: float 6s ease-in-out infinite; }
-.animate-float-2 { animation: float 7s ease-in-out 2s infinite; }
-.animate-float-3 { animation: float 5s ease-in-out 1s infinite; }
-.animate-float-4 { animation: float 8s ease-in-out 3s infinite; }
+.animate-float-1 {
+  animation: float 6s ease-in-out infinite;
+}
+
+.animate-float-2 {
+  animation: float 7s ease-in-out 2s infinite;
+}
+
+.animate-float-3 {
+  animation: float 5s ease-in-out 1s infinite;
+}
+
+.animate-float-4 {
+  animation: float 8s ease-in-out 3s infinite;
+}
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes scaleIn {
-  from { transform: scale(0.95); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
-.animate-fadeIn { animation: fadeIn 0.15s ease-out forwards; }
-.animate-scaleIn { animation: scaleIn 0.15s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+.animate-fadeIn {
+  animation: fadeIn 0.15s ease-out forwards;
+}
+
+.animate-scaleIn {
+  animation: scaleIn 0.15s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* Sidebar Collapsed screen adjustments */
+.pl-64 {
+  transition: padding-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sidebar-collapsed .pl-64 {
+  padding-left: 5rem !important; /* Equivalent to pl-20 (80px) */
+}

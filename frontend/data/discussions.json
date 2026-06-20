@@ -1,0 +1,30 @@
+[
+  {
+    "id": 1781930106028,
+    "moduleId": 1781848568626,
+    "email": "alex@netmaster.edu",
+    "name": "Alex Chen",
+    "role": "Student",
+    "message": "Hi, I'm Alex Chen from BSIT 3B.",
+    "createdAt": "2026-06-20T04:35:05.128Z"
+  },
+  {
+    "id": 1781930130367,
+    "moduleId": 0,
+    "email": "alex@netmaster.edu",
+    "name": "Alex Chen",
+    "role": "Student",
+    "message": "Hello Everyone!",
+    "createdAt": "2026-06-20T04:35:30.024Z"
+  },
+  {
+    "id": 1781930667543,
+    "moduleId": 1781848568626,
+    "email": "almazan@gmail.com",
+    "name": "daryl almazan",
+    "role": "Professor",
+    "message": "Please observed what is being sent as message here, it is being monitored by the professor and admin.",
+    "isWarning": true,
+    "createdAt": "2026-06-20T04:44:26.639Z"
+  }
+]

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 import Sidebar from "@/components/Sidebar";
 
 const CircularProgress = ({ progress, size = 20, strokeWidth = 2, isSelected = false }: { progress: number, size?: number, strokeWidth?: number, isSelected?: boolean }) => {
@@ -37,6 +38,16 @@ const CircularProgress = ({ progress, size = 20, strokeWidth = 2, isSelected = f
     </div>
   );
 };
+
+// Helper to extract clean user initials for avatars
+function getAvatarInitials(name: string) {
+  if (!name) return "?";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+  return parts[0].substring(0, 2).toUpperCase();
+}
 
 interface InteractiveSubnettingActivityProps {
   onComplete: () => void;
@@ -141,7 +152,7 @@ function InteractiveSubnettingActivity({ onComplete, isCompleted, handleSelectNe
     if (stored) {
       try {
         current = JSON.parse(stored);
-      } catch (e) {}
+      } catch (e) { }
     }
     current[taskKey] = score;
     localStorage.setItem(key, JSON.stringify(current));
@@ -157,7 +168,7 @@ function InteractiveSubnettingActivity({ onComplete, isCompleted, handleSelectNe
     if (vlsmNetworks.HR === "192.168.10.192") score += 1;
     if (vlsmPrefixes.WAN === "/30") score += 1;
     if (vlsmNetworks.WAN === "192.168.10.224") score += 1;
-    
+
     setVlsmScore(score);
     saveScore("vlsm", score);
   };
@@ -168,7 +179,7 @@ function InteractiveSubnettingActivity({ onComplete, isCompleted, handleSelectNe
       if (b === correctAndingBits[idx]) score += 1;
     });
     if (andingDecimalResult.trim() === correctAndingDecimal) score += 1;
-    
+
     setAndingScore(score);
     saveScore("anding", score);
   };
@@ -178,7 +189,7 @@ function InteractiveSubnettingActivity({ onComplete, isCompleted, handleSelectNe
     if (ipv6Prefix === "2001:0db8:acad") score += 1;
     if (ipv6Subnet === "0001") score += 1;
     if (ipv6Interface === "0000:0000:0000:0001") score += 1;
-    
+
     setIpv6Score(score);
     saveScore("ipv6", score);
   };
@@ -197,8 +208,8 @@ function InteractiveSubnettingActivity({ onComplete, isCompleted, handleSelectNe
         <button
           onClick={() => setActiveTab("vlsm")}
           className={`px-4 py-3 text-xs font-bold transition-all border-b-2 cursor-pointer ${activeTab === "vlsm"
-              ? "border-brand-cyan text-brand-cyan"
-              : "border-transparent text-brand-muted hover:text-brand-text"
+            ? "border-brand-cyan text-brand-cyan"
+            : "border-transparent text-brand-muted hover:text-brand-text"
             }`}
         >
           Task 1: VLSM Design {vlsmScore !== null ? `(${vlsmScore}/8) ✓` : ""}
@@ -206,8 +217,8 @@ function InteractiveSubnettingActivity({ onComplete, isCompleted, handleSelectNe
         <button
           onClick={() => setActiveTab("anding")}
           className={`px-4 py-3 text-xs font-bold transition-all border-b-2 cursor-pointer ${activeTab === "anding"
-              ? "border-brand-cyan text-brand-cyan"
-              : "border-transparent text-brand-muted hover:text-brand-text"
+            ? "border-brand-cyan text-brand-cyan"
+            : "border-transparent text-brand-muted hover:text-brand-text"
             }`}
         >
           Task 2: Bitwise ANDing {andingScore !== null ? `(${andingScore}/9) ✓` : ""}
@@ -215,8 +226,8 @@ function InteractiveSubnettingActivity({ onComplete, isCompleted, handleSelectNe
         <button
           onClick={() => setActiveTab("ipv6")}
           className={`px-4 py-3 text-xs font-bold transition-all border-b-2 cursor-pointer ${activeTab === "ipv6"
-              ? "border-brand-cyan text-brand-cyan"
-              : "border-transparent text-brand-muted hover:text-brand-text"
+            ? "border-brand-cyan text-brand-cyan"
+            : "border-transparent text-brand-muted hover:text-brand-text"
             }`}
         >
           Task 3: IPv6 Address Anatomy {ipv6Score !== null ? `(${ipv6Score}/3) ✓` : ""}
@@ -396,8 +407,8 @@ function InteractiveSubnettingActivity({ onComplete, isCompleted, handleSelectNe
                     key={idx}
                     onClick={() => toggleAndingBit(idx)}
                     className={`p-2.5 rounded-lg border font-mono font-bold text-sm cursor-pointer transition-all ${b === 1
-                        ? "bg-brand-cyan/20 border-brand-cyan text-brand-cyan shadow-sm"
-                        : "bg-brand-card border-brand-border/40 text-brand-muted hover:border-brand-border"
+                      ? "bg-brand-cyan/20 border-brand-cyan text-brand-cyan shadow-sm"
+                      : "bg-brand-card border-brand-border/40 text-brand-muted hover:border-brand-border"
                       }`}
                   >
                     {b}
@@ -699,12 +710,28 @@ type ViewSelection = {
 
 export default function StudentCurriculum() {
   const [modules, setModules] = useState<Module[]>([]);
+  const [userProfile, setUserProfile] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   // Selected item states
   const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
   const [selectedSubtopic, setSelectedSubtopic] = useState<Subtopic | null>(null);
   const [selectedModuleId, setSelectedModuleId] = useState<number | null>(null);
+
+  // Subject Overview States
+  const [selectedSpecialItem, setSelectedSpecialItem] = useState<"announcements" | "self-introduction" | "subject-guide" | null>(null);
+  const [expandedSubjectOverview, setExpandedSubjectOverview] = useState(true);
+
+  // Embedded Discussions States
+  const [selfIntroPosts, setSelfIntroPosts] = useState<any[]>([]);
+  const [newSelfIntroMsg, setNewSelfIntroMsg] = useState("");
+  const [selfIntroError, setSelfIntroError] = useState("");
+
+  const [moduleDiscussionPosts, setModuleDiscussionPosts] = useState<any[]>([]);
+  const [newModuleDiscussionMsg, setNewModuleDiscussionMsg] = useState("");
+  const [moduleDiscussionError, setModuleDiscussionError] = useState("");
+
+  const moduleChatScrollRef = useRef<HTMLDivElement | null>(null);
 
   // Expanded modules outline state
   const [expandedModules, setExpandedModules] = useState<Record<number, boolean>>({});
@@ -1251,36 +1278,65 @@ export default function StudentCurriculum() {
     if (mods.length === 0) return mods;
     return mods.map((mod, idx) => {
       if (idx === 0) {
-        const hasActivity = mod.topics.some(t => t.id === 999999);
-        if (!hasActivity) {
-          return {
-            ...mod,
-            topics: [
-              ...mod.topics,
-              {
-                id: 999999,
-                title: "Interactive Subnetting Activity",
-                materials: [
-                  {
-                    id: 9999991,
-                    type: "text",
-                    title: "Hands-on Exercises",
-                    content: "interactive-activity-placeholder"
-                  }
-                ],
-                subtopics: []
-              }
-            ]
-          };
-        }
+        const baseTopics = mod.topics.filter(t => t.id !== 888888 && t.id !== 999999);
+        return {
+          ...mod,
+          topics: [
+            ...baseTopics,
+            {
+              id: 888888,
+              title: "Module Discussion Forum",
+              materials: [
+                {
+                  id: 8888881,
+                  type: "text",
+                  title: "Discussion Feed",
+                  content: "module-discussion-placeholder"
+                }
+              ],
+              subtopics: []
+            },
+            {
+              id: 999999,
+              title: "Interactive Subnetting Activity",
+              materials: [
+                {
+                  id: 9999991,
+                  type: "text",
+                  title: "Hands-on Exercises",
+                  content: "interactive-activity-placeholder"
+                }
+              ],
+              subtopics: []
+            }
+          ]
+        };
       }
       return mod;
     });
   };
 
   useEffect(() => {
-    const fetchModules = async () => {
+    const fetchAllData = async () => {
+      const email = localStorage.getItem("userEmail") || "";
       try {
+        if (email) {
+          try {
+            const usersRes = await fetch("/api/users");
+            const usersData = await usersRes.json();
+            if (usersData.success && usersData.users) {
+              const profile = usersData.users.find(
+                (u: any) => u.email.toLowerCase() === email.toLowerCase()
+              );
+              if (profile) {
+                setUserProfile(profile);
+              }
+            }
+          } catch (e) {
+            console.error("Error fetching user profile:", e);
+          }
+        }
+
         const res = await fetch("/api/modules");
         const data = await res.json();
         if (data.success && data.modules) {
@@ -1296,7 +1352,23 @@ export default function StudentCurriculum() {
             }
           }
           try {
-            localStorage.setItem("professor_course_modules", JSON.stringify(processed));
+            // Strip large base64 image data to prevent exceeding localStorage quota
+            const stripped = processed.map((m: any) => ({
+              ...m,
+              topics: m.topics.map((t: any) => ({
+                ...t,
+                materials: t.materials?.map((mat: any) => 
+                  mat.type === "image" ? { ...mat, content: "" } : mat
+                ),
+                subtopics: t.subtopics?.map((sub: any) => ({
+                  ...sub,
+                  materials: sub.materials?.map((mat: any) => 
+                    mat.type === "image" ? { ...mat, content: "" } : mat
+                  )
+                }))
+              }))
+            }));
+            localStorage.setItem("professor_course_modules", JSON.stringify(stripped));
           } catch (e) {
             console.warn("Storage quota exceeded, could not save to localStorage:", e);
           }
@@ -1333,8 +1405,141 @@ export default function StudentCurriculum() {
       }
     };
 
-    fetchModules();
+    fetchAllData();
   }, []);
+
+  // 3. Embedded Discussion Board API Interactions
+
+  // Fetch self-introduction posts
+  const fetchSelfIntroPosts = async () => {
+    try {
+      const res = await fetch("/api/discussions?moduleId=999998");
+      const data = await res.json();
+      if (data.success && data.posts) {
+        setSelfIntroPosts(data.posts);
+      }
+    } catch (e) {
+      console.error("Error fetching self-introduction posts:", e);
+    }
+  };
+
+  // Submit self-introduction post
+  const handlePostSelfIntro = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSelfIntroMsg.trim()) return;
+    setSelfIntroError("");
+    const email = userProfile?.email || localStorage.getItem("userEmail") || "";
+    const name = userProfile?.name || localStorage.getItem("userName") || "Student";
+    try {
+      const res = await fetch("/api/discussions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          moduleId: 999998,
+          email,
+          name,
+          message: newSelfIntroMsg,
+          isWarning: false
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setNewSelfIntroMsg("");
+        fetchSelfIntroPosts();
+      } else {
+        setSelfIntroError(data.message || "Failed to post introduction.");
+      }
+    } catch (err) {
+      setSelfIntroError("Failed to send message.");
+    }
+  };
+
+  // Fetch module discussion posts
+  const fetchModuleDiscussionPosts = async (mId: number) => {
+    try {
+      const res = await fetch(`/api/discussions?moduleId=${mId}`);
+      const data = await res.json();
+      if (data.success && data.posts) {
+        setModuleDiscussionPosts(data.posts);
+      }
+    } catch (e) {
+      console.error("Error fetching module discussions:", e);
+    }
+  };
+
+  // Submit module discussion post
+  const handlePostModuleDiscussion = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newModuleDiscussionMsg.trim()) return;
+    setModuleDiscussionError("");
+    const email = userProfile?.email || localStorage.getItem("userEmail") || "";
+    const name = userProfile?.name || localStorage.getItem("userName") || "Student";
+    try {
+      const res = await fetch("/api/discussions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          moduleId: selectedModuleId,
+          email,
+          name,
+          message: newModuleDiscussionMsg,
+          isWarning: false
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setNewModuleDiscussionMsg("");
+        fetchModuleDiscussionPosts(selectedModuleId!);
+        // Check for bottom scroll to unlock
+        setTimeout(checkChatScrolledToBottom, 100);
+      } else {
+        setModuleDiscussionError(data.message || "Failed to post message.");
+      }
+    } catch (err) {
+      setModuleDiscussionError("Failed to send message.");
+    }
+  };
+
+  // Check if scrolled to bottom to unlock Interactive activity
+  const checkChatScrolledToBottom = () => {
+    if (!moduleChatScrollRef.current) return;
+    const { scrollTop, clientHeight, scrollHeight } = moduleChatScrollRef.current;
+    if (scrollTop + clientHeight >= scrollHeight - 20) {
+      if (!completedTopics[888888]) {
+        toggleTopicCompletion(888888);
+      }
+    }
+  };
+
+  // Trigger self-intro fetch on selection
+  useEffect(() => {
+    if (selectedSpecialItem === "self-introduction") {
+      fetchSelfIntroPosts();
+    }
+  }, [selectedSpecialItem]);
+
+  // Trigger module-discussion fetch on selection
+  useEffect(() => {
+    if (selectedTopic?.id === 888888 && selectedModuleId) {
+      fetchModuleDiscussionPosts(selectedModuleId);
+    }
+  }, [selectedTopic, selectedModuleId]);
+
+  // Handle auto-complete for short discussions with no scrollbar
+  useEffect(() => {
+    if (selectedTopic?.id === 888888 && moduleDiscussionPosts.length > 0) {
+      setTimeout(() => {
+        if (moduleChatScrollRef.current) {
+          const { scrollTop, clientHeight, scrollHeight } = moduleChatScrollRef.current;
+          if (scrollHeight <= clientHeight + 10) {
+            if (!completedTopics[888888]) {
+              toggleTopicCompletion(888888);
+            }
+          }
+        }
+      }, 350);
+    }
+  }, [moduleDiscussionPosts, selectedTopic]);
 
   const toggleModuleExpand = (moduleId: number) => {
     setExpandedModules(prev => ({ ...prev, [moduleId]: !prev[moduleId] }));
@@ -1367,6 +1572,155 @@ export default function StudentCurriculum() {
       ? selectedTopic.title
       : "Select a topic to start learning";
 
+  const renderSpecialWorkspaceItem = () => {
+    if (selectedSpecialItem === "announcements") {
+      return (
+        <div className="flex-grow flex flex-col h-full animate-scaleIn">
+          <div className="border-b border-brand-border/40 pb-4 mb-6">
+            <span className="text-[10px] text-brand-cyan uppercase tracking-wider font-semibold">📢 General announcements</span>
+            <h2 className="text-xl font-bold mt-0.5">Subject Announcements</h2>
+          </div>
+          <div className="flex flex-col gap-4 overflow-y-auto max-h-[500px] pr-1.5">
+            <div className="bg-brand-bg/40 border border-brand-border/30 rounded-2xl p-5 shadow-sm flex flex-col gap-3">
+              <div className="flex justify-between items-center border-b border-brand-border/20 pb-3">
+                <h4 className="font-bold text-brand-cyan text-sm">Welcome to Networking 1! 🚀</h4>
+                <span className="text-[10px] text-brand-muted font-mono bg-brand-bg border border-brand-border/40 px-2 py-0.5 rounded">June 15, 2026</span>
+              </div>
+              <p className="text-xs text-brand-text/90 leading-relaxed">
+                Hello class! Welcome to our gamified networking lab. To get started, please make sure you verify your registration details and then take the Module 1 Pre-test. This will unlock the study guides, lecture readings, and the interactive IP subnetting challenge! Let's master subnetting together.
+              </p>
+            </div>
+            <div className="bg-brand-bg/40 border border-brand-border/30 rounded-2xl p-5 shadow-sm flex flex-col gap-3">
+              <div className="flex justify-between items-center border-b border-brand-border/20 pb-3">
+                <h4 className="font-bold text-brand-cyan text-sm">First Lab Exercise Available 💻</h4>
+                <span className="text-[10px] text-brand-muted font-mono bg-brand-bg border border-brand-border/40 px-2 py-0.5 rounded">June 18, 2026</span>
+              </div>
+              <p className="text-xs text-brand-text/90 leading-relaxed">
+                The VLSM and ANDing interactive lab tasks are now active. Remember that you must review the lecture materials in 'Subnetting in the IPv6 Era' and participate in the module discussion board before attempting the exercises. Scrolling to the bottom of the module discussion will unlock the interactive task!
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (selectedSpecialItem === "subject-guide") {
+      return (
+        <div className="flex-grow flex flex-col h-full animate-scaleIn">
+          <div className="border-b border-brand-border/40 pb-4 mb-6">
+            <span className="text-[10px] text-brand-cyan uppercase tracking-wider font-semibold">📄 Subject Information</span>
+            <h2 className="text-xl font-bold mt-0.5">[MUST READ] Subject Guide</h2>
+          </div>
+          <div className="flex flex-col gap-6 overflow-y-auto max-h-[500px] pr-1.5 leading-relaxed">
+            <div className="bg-brand-bg/30 border border-brand-border/40 rounded-2xl p-5 flex flex-col gap-4">
+              <h3 className="font-bold text-sm text-brand-cyan border-b border-brand-border/30 pb-2">Course Overview & Syllabus</h3>
+              <p className="text-xs text-brand-text/90 leading-relaxed">
+                This subject introduces fundamental concepts of computer networking, IP address structures, subnet masks, variable length subnet masking (VLSM), and binary ANDing logic. Students will engage in gamified interactive exercises to test their subnetting and network anatomy skills.
+              </p>
+
+              <h4 className="font-bold text-xs text-brand-text mt-2">Syllabus Breakdown:</h4>
+              <ul className="list-disc pl-5 text-xs text-brand-muted flex flex-col gap-1">
+                <li>Module 1: Introduction of Subnetting (FLSM, VLSM, Binary ANDing, IPv6 Era)</li>
+                <li>Module 2: Routing Protocols & Local Area Networks</li>
+              </ul>
+            </div>
+
+            <div className="bg-brand-bg/30 border border-brand-border/40 rounded-2xl p-5 flex flex-col gap-4">
+              <h3 className="font-bold text-sm text-brand-cyan border-b border-brand-border/30 pb-2">Grading Policy</h3>
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="flex justify-between border-b border-brand-border/15 pb-1">
+                  <span className="text-brand-muted">Pre-tests:</span>
+                  <span className="font-bold text-brand-text">20%</span>
+                </div>
+                <div className="flex justify-between border-b border-brand-border/15 pb-1">
+                  <span className="text-brand-muted">Interactive Labs:</span>
+                  <span className="font-bold text-brand-text">40%</span>
+                </div>
+                <div className="flex justify-between border-b border-brand-border/15 pb-1">
+                  <span className="text-brand-muted">Quizzes:</span>
+                  <span className="font-bold text-brand-text">30%</span>
+                </div>
+                <div className="flex justify-between border-b border-brand-border/15 pb-1">
+                  <span className="text-brand-muted">Forums Participation:</span>
+                  <span className="font-bold text-brand-text">10%</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-brand-bg/30 border border-brand-border/40 rounded-2xl p-5 flex flex-col gap-4">
+              <h3 className="font-bold text-sm text-brand-cyan border-b border-brand-border/30 pb-2">Rules of Conduct</h3>
+              <p className="text-xs text-brand-text/90 leading-relaxed">
+                Respectful communication is strictly enforced on all discussion boards. Cheating or distributing direct solutions to interactive tasks is prohibited. Working together to troubleshoot topologies is welcomed!
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (selectedSpecialItem === "self-introduction") {
+      return (
+        <div className="flex-grow flex flex-col h-full animate-scaleIn">
+          <div className="border-b border-brand-border/40 pb-4 mb-6">
+            <span className="text-[10px] text-brand-cyan uppercase tracking-wider font-semibold">👋 Class Introductions</span>
+            <h2 className="text-xl font-bold mt-0.5">Self-introduction Board</h2>
+            <p className="text-brand-muted text-xs mt-1">Say hello to your fellow classmates! Share your name, program, and hobbies.</p>
+          </div>
+
+          {/* Chat area */}
+          <div className="flex-grow overflow-y-auto max-h-[300px] border border-brand-border/40 bg-brand-bg/25 rounded-2xl p-4 flex flex-col gap-3 scrollbar-thin mb-4">
+            {selfIntroPosts.length === 0 ? (
+              <div className="text-center py-10 text-brand-muted italic text-xs">
+                No introductions shared yet. Be the first to say hello!
+              </div>
+            ) : (
+              selfIntroPosts.map((post) => (
+                <div key={post.id} className="bg-brand-bg/50 border border-brand-border/35 rounded-xl p-3.5 flex gap-3 animate-scaleIn">
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 bg-gradient-to-br from-brand-cyan to-blue-600 text-brand-bg select-none">
+                    {getAvatarInitials(post.name)}
+                  </div>
+                  <div className="flex-grow flex flex-col gap-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-brand-text">{post.name}</span>
+                      <span className="text-[9px] text-brand-muted font-mono">{new Date(post.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                    <p className="text-xs text-brand-text/90 leading-relaxed whitespace-pre-wrap">{post.message}</p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Form */}
+          <form onSubmit={handlePostSelfIntro} className="flex flex-col gap-2 shrink-0">
+            {selfIntroError && <span className="text-red-400 text-xs">{selfIntroError}</span>}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newSelfIntroMsg}
+                onChange={(e) => {
+                  setNewSelfIntroMsg(e.target.value);
+                  if (selfIntroError) setSelfIntroError("");
+                }}
+                placeholder="Type your introduction message (e.g. Hi I'm Jake from BSIT 3A!)..."
+                className="flex-grow bg-brand-bg/50 border border-brand-border/40 focus:border-brand-cyan focus:outline-none rounded-xl px-4 py-2.5 text-xs text-brand-text placeholder-brand-muted/70"
+              />
+              <button
+                type="submit"
+                disabled={!newSelfIntroMsg.trim()}
+                className="px-5 py-2.5 bg-brand-cyan hover:bg-brand-cyan-hover disabled:opacity-50 disabled:cursor-not-allowed text-brand-bg font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md cursor-pointer shrink-0"
+              >
+                Post 👋
+              </button>
+            </div>
+          </form>
+        </div>
+      );
+    }
+
+    return null;
+  };
+
 
 
   return (
@@ -1387,6 +1741,83 @@ export default function StudentCurriculum() {
           <div className="flex justify-center items-center py-20">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-cyan"></div>
           </div>
+        ) : userProfile && userProfile.status !== "admitted" ? (
+          <div className="flex flex-col gap-8 animate-all duration-300">
+            {userProfile.status === "rejected" ? (
+              <div className="bg-brand-card border border-red-500/30 rounded-2xl p-8 shadow-2xl flex flex-col gap-6 max-w-3xl">
+                <div className="flex items-center gap-4 border-b border-red-500/10 pb-4">
+                  <div className="p-3.5 bg-red-500/10 text-red-500 rounded-2xl border border-red-500/20 shrink-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" /></svg>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-red-400">Registration Status</span>
+                    <h2 className="text-xl font-bold text-red-500 mt-0.5">Registration Rejected</h2>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <p className="text-sm font-semibold text-brand-text">Your student registration was rejected by the professor.</p>
+                  {userProfile.rejectMessage && (
+                    <div className="bg-red-500/5 border border-red-500/20 rounded-xl p-4 mt-2">
+                      <div className="text-[10px] font-bold text-red-400 uppercase tracking-wider mb-1">Feedback from Professor:</div>
+                      <p className="text-xs text-brand-text font-medium leading-relaxed italic">"{userProfile.rejectMessage}"</p>
+                    </div>
+                  )}
+                  <p className="text-xs text-brand-muted mt-2 leading-relaxed">
+                    Please review your profile details and update them in Settings. Correcting your details and saving will resubmit your registration to the professor for review.
+                  </p>
+                </div>
+
+                <div className="flex pt-2">
+                  <Link href="/student/settings" className="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-xl transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-2">
+                    Edit Profile Settings
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></svg>
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-brand-card border border-brand-border rounded-2xl p-8 shadow-2xl flex flex-col gap-6 max-w-3xl">
+                <div className="flex items-center gap-4 border-b border-brand-border/40 pb-4">
+                  <div className="p-3.5 bg-yellow-500/10 text-yellow-500 rounded-2xl border border-yellow-500/20 shrink-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-brand-cyan">Registration Status</span>
+                    <h2 className="text-xl font-bold mt-0.5">Awaiting Approval</h2>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <p className="text-sm font-semibold text-brand-text">Your student profile is currently pending validation by your professor.</p>
+                  <p className="text-xs text-brand-muted leading-relaxed">
+                    Once your professor verifies your registration details, you will be granted access to the course syllabus, subjects, pre-tests, and network topology labs.
+                  </p>
+                </div>
+
+                <div className="bg-brand-bg/50 border border-brand-border/30 rounded-xl p-5 mt-2">
+                  <h4 className="text-[10px] font-bold text-brand-cyan uppercase tracking-wider mb-3">Submitted Registration Details</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <span className="text-[9px] text-brand-muted uppercase font-bold tracking-wider">Student ID</span>
+                      <p className="text-xs font-mono font-semibold">{userProfile.studentId || "N/A"}</p>
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-brand-muted uppercase font-bold tracking-wider">Section</span>
+                      <p className="text-xs font-semibold">{userProfile.section || "N/A"}</p>
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-brand-muted uppercase font-bold tracking-wider">Course / Program</span>
+                      <p className="text-xs font-semibold">{userProfile.course || "N/A"}</p>
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-brand-muted uppercase font-bold tracking-wider">Full Name</span>
+                      <p className="text-xs font-semibold">{userProfile.name}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         ) : modules.length === 0 ? (
           <div className="text-center py-20 bg-brand-card border border-brand-border rounded-2xl flex flex-col items-center justify-center p-8">
             <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-brand-muted mb-4"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
@@ -1405,6 +1836,91 @@ export default function StudentCurriculum() {
               </h3>
 
               <div className="flex flex-col gap-3 overflow-y-auto max-h-[500px]">
+                {/* Subject Overview Static Section */}
+                <div className="border border-brand-border/40 rounded-xl overflow-hidden">
+                  <button
+                    onClick={() => {
+                      setExpandedSubjectOverview(!expandedSubjectOverview);
+                    }}
+                    className={`w-full px-4 py-3 flex items-center justify-between text-left transition-colors border-b border-brand-border/20 hover:bg-brand-bg/85 ${selectedSpecialItem !== null
+                        ? "bg-brand-cyan/15 text-brand-cyan font-bold border-l-2 border-l-brand-cyan"
+                        : "bg-brand-bg/50 text-brand-text"
+                      }`}
+                  >
+                    <div className="flex-grow min-w-0 pr-2">
+                      <span className={`text-[9px] uppercase tracking-wider font-semibold ${selectedSpecialItem !== null ? "text-brand-cyan" : "text-brand-cyan/70"}`}>
+                        General
+                      </span>
+                      <h4 className="text-sm font-bold mt-0.5 whitespace-normal break-words leading-tight">Subject Overview</h4>
+                    </div>
+                    <span className="text-brand-muted shrink-0">
+                      {expandedSubjectOverview ? (
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m18 15-6-6-6 6" /></svg>
+                      ) : (
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+                      )}
+                    </span>
+                  </button>
+
+                  {expandedSubjectOverview && (
+                    <div className="p-2 flex flex-col gap-1.5 bg-brand-card/30">
+                      {/* Announcements */}
+                      <button
+                        onClick={() => {
+                          setSelectedSpecialItem("announcements");
+                          setSelectedTopic(null);
+                          setSelectedSubtopic(null);
+                          setSelectedModuleId(null);
+                          setTakingPretest(false);
+                        }}
+                        className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${selectedSpecialItem === "announcements"
+                            ? "bg-brand-cyan text-brand-bg font-bold shadow-sm"
+                            : "text-brand-muted hover:text-brand-text hover:bg-brand-bg/40"
+                          }`}
+                      >
+                        <span>📢</span>
+                        <span>Announcements</span>
+                      </button>
+
+                      {/* Self-introduction */}
+                      <button
+                        onClick={() => {
+                          setSelectedSpecialItem("self-introduction");
+                          setSelectedTopic(null);
+                          setSelectedSubtopic(null);
+                          setSelectedModuleId(null);
+                          setTakingPretest(false);
+                        }}
+                        className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${selectedSpecialItem === "self-introduction"
+                            ? "bg-brand-cyan text-brand-bg font-bold shadow-sm"
+                            : "text-brand-muted hover:text-brand-text hover:bg-brand-bg/40"
+                          }`}
+                      >
+                        <span>👋</span>
+                        <span>Self-introduction</span>
+                      </button>
+
+                      {/* Subject Guide */}
+                      <button
+                        onClick={() => {
+                          setSelectedSpecialItem("subject-guide");
+                          setSelectedTopic(null);
+                          setSelectedSubtopic(null);
+                          setSelectedModuleId(null);
+                          setTakingPretest(false);
+                        }}
+                        className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${selectedSpecialItem === "subject-guide"
+                            ? "bg-brand-cyan text-brand-bg font-bold shadow-sm"
+                            : "text-brand-muted hover:text-brand-text hover:bg-brand-bg/40"
+                          }`}
+                      >
+                        <span>📄</span>
+                        <span>[MUST READ] Subject Guide</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+
                 {modules.map((mod) => {
                   const isModExpanded = expandedModules[mod.id] !== false;
 
@@ -1416,11 +1932,13 @@ export default function StudentCurriculum() {
                           setSelectedModuleId(mod.id);
                           setSelectedTopic(null);
                           setSelectedSubtopic(null);
+                          setSelectedSpecialItem(null);
+                          setTakingPretest(false);
                           toggleModuleExpand(mod.id);
                         }}
                         className={`w-full px-4 py-3 flex items-center justify-between text-left transition-colors border-b border-brand-border/20 hover:bg-brand-bg/85 ${selectedModuleId === mod.id && !selectedTopic
-                            ? "bg-brand-cyan/15 text-brand-cyan font-bold border-l-2 border-l-brand-cyan"
-                            : "bg-brand-bg/50 text-brand-text"
+                          ? "bg-brand-cyan/15 text-brand-cyan font-bold border-l-2 border-l-brand-cyan"
+                          : "bg-brand-bg/50 text-brand-text"
                           }`}
                       >
                         <div className="flex-grow min-w-0 pr-2">
@@ -1463,19 +1981,21 @@ export default function StudentCurriculum() {
                                   {/* Topic Item Button */}
                                   <div
                                     className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors ${!isUnlocked
-                                        ? isTopicSelected
-                                          ? "bg-brand-card border border-brand-border/40 text-brand-muted opacity-80"
-                                          : "text-brand-muted/65 hover:bg-brand-bg/25"
-                                        : isTopicSelected
-                                          ? "bg-brand-cyan text-brand-bg font-bold shadow-sm"
-                                          : selectedTopic?.id === topic.id
-                                            ? "bg-brand-cyan/10 text-brand-text font-semibold border border-brand-cyan/20"
-                                            : "text-brand-muted hover:text-brand-text hover:bg-brand-bg/40"
+                                      ? isTopicSelected
+                                        ? "bg-brand-card border border-brand-border/40 text-brand-muted opacity-80"
+                                        : "text-brand-muted/65 hover:bg-brand-bg/25"
+                                      : isTopicSelected
+                                        ? "bg-brand-cyan text-brand-bg font-bold shadow-sm"
+                                        : selectedTopic?.id === topic.id
+                                          ? "bg-brand-cyan/10 text-brand-text font-semibold border border-brand-cyan/20"
+                                          : "text-brand-muted hover:text-brand-text hover:bg-brand-bg/40"
                                       }`}
                                     onClick={() => {
                                       setSelectedTopic(topic);
                                       setSelectedSubtopic(null);
                                       setSelectedModuleId(mod.id);
+                                      setSelectedSpecialItem(null);
+                                      setTakingPretest(false);
                                     }}
                                   >
                                     <div className="flex items-center gap-2 text-sm font-bold min-w-0 flex-grow whitespace-normal break-words leading-tight">
@@ -1507,12 +2027,12 @@ export default function StudentCurriculum() {
                                           strokeLinecap="round"
                                           strokeLinejoin="round"
                                           className={`shrink-0 ${progress === 100
-                                              ? isTopicSelected
-                                                ? "text-green-800"
-                                                : "text-green-500"
-                                              : isTopicSelected
-                                                ? "text-white/40"
-                                                : "text-brand-border/40"
+                                            ? isTopicSelected
+                                              ? "text-green-800"
+                                              : "text-green-500"
+                                            : isTopicSelected
+                                              ? "text-white/40"
+                                              : "text-brand-border/40"
                                             }`}
                                         >
                                           <circle cx="12" cy="12" r="10" />
@@ -1570,12 +2090,14 @@ export default function StudentCurriculum() {
                                               setSelectedTopic(topic);
                                               setSelectedSubtopic(sub);
                                               setSelectedModuleId(mod.id);
+                                              setSelectedSpecialItem(null);
+                                              setTakingPretest(false);
                                             }}
                                             className={`w-full text-left px-2.5 py-1.5 rounded text-[11px] whitespace-normal break-words leading-tight transition-colors ${!isUnlocked
-                                                ? "opacity-40 cursor-not-allowed text-brand-muted"
-                                                : isSubSelected
-                                                  ? "bg-brand-cyan text-brand-bg font-bold shadow-sm"
-                                                  : "text-brand-muted hover:text-brand-text hover:bg-brand-bg/20"
+                                              ? "opacity-40 cursor-not-allowed text-brand-muted"
+                                              : isSubSelected
+                                                ? "bg-brand-cyan text-brand-bg font-bold shadow-sm"
+                                                : "text-brand-muted hover:text-brand-text hover:bg-brand-bg/20"
                                               }`}
                                           >
                                             • {sub.title}
@@ -1598,7 +2120,10 @@ export default function StudentCurriculum() {
             {/* RIGHT COLUMN: Study Workspace Panel */}
             <div ref={workspaceRef} className="lg:col-span-2 bg-brand-card border border-brand-border rounded-2xl p-6 shadow-lg min-h-[460px] flex flex-col animate-all duration-300">
 
-              {takingPretest && selectedModule && selectedModule.pretest ? (
+              {selectedSpecialItem !== null ? (
+                // SPECIAL WORKSPACE VIEW
+                renderSpecialWorkspaceItem()
+              ) : takingPretest && selectedModule && selectedModule.pretest ? (
                 // PRE-TEST INTERFACE
                 <div
                   className="flex-grow flex flex-col h-full select-none"
@@ -1662,8 +2187,8 @@ export default function StudentCurriculum() {
                                     key={oIdx}
                                     onClick={() => setPretestAnswers(prev => ({ ...prev, [idx]: oIdx }))}
                                     className={`w-full text-left p-3 rounded-lg border text-xs transition-all ${isSelected
-                                        ? "bg-brand-cyan/15 border-brand-cyan text-brand-cyan font-bold"
-                                        : "bg-brand-card/50 border-brand-border/45 text-brand-text/90 hover:border-brand-border-hover hover:bg-brand-bg/30"
+                                      ? "bg-brand-cyan/15 border-brand-cyan text-brand-cyan font-bold"
+                                      : "bg-brand-card/50 border-brand-border/45 text-brand-text/90 hover:border-brand-border-hover hover:bg-brand-bg/30"
                                       }`}
                                   >
                                     <span className="font-bold mr-2">{String.fromCharCode(65 + oIdx)}.</span>
@@ -1807,12 +2332,12 @@ export default function StudentCurriculum() {
                                     </h4>
                                   </div>
                                   <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${!isUnlocked
-                                      ? "bg-brand-muted/10 text-brand-muted border border-brand-border/40"
-                                      : progress === 100
-                                        ? "bg-green-500/10 text-green-400 border border-green-500/25"
-                                        : progress > 0
-                                          ? "bg-yellow-500/10 text-yellow-400 border border-yellow-500/25"
-                                          : "bg-brand-muted/10 text-brand-muted border border-brand-border/40"
+                                    ? "bg-brand-muted/10 text-brand-muted border border-brand-border/40"
+                                    : progress === 100
+                                      ? "bg-green-500/10 text-green-400 border border-green-500/25"
+                                      : progress > 0
+                                        ? "bg-yellow-500/10 text-yellow-400 border border-yellow-500/25"
+                                        : "bg-brand-muted/10 text-brand-muted border border-brand-border/40"
                                     }`}>
                                     {!isUnlocked ? "Locked" : progress === 100 ? "Completed" : progress > 0 ? `In Progress (${progress}%)` : "Not Started"}
                                   </span>
@@ -1955,6 +2480,107 @@ export default function StudentCurriculum() {
                             handleSelectNextTopic={handleSelectNextTopic}
                             moduleId={selectedModule!.id}
                           />
+                        ) : selectedTopic!.id === 888888 ? (
+                          // MODULE DISCUSSION FORUM VIEW
+                          <div className="flex-grow flex flex-col h-full animate-scaleIn">
+                            <p className="text-brand-muted text-xs mb-3">
+                              Ask questions, share subnetting tips, and collaborate on this module's topics.
+                              <strong> You must scroll to the bottom of the feed to proceed.</strong>
+                            </p>
+
+                            {/* Scrollable chat container */}
+                            <div
+                              ref={moduleChatScrollRef}
+                              onScroll={checkChatScrolledToBottom}
+                              className="flex-grow overflow-y-auto max-h-[300px] border border-brand-border/40 bg-brand-bg/25 rounded-2xl p-4 flex flex-col gap-3 scrollbar-thin mb-4"
+                            >
+                              {moduleDiscussionPosts.length === 0 ? (
+                                <div className="text-center py-10 text-brand-muted italic text-xs">
+                                  No messages posted yet. Start the conversation!
+                                </div>
+                              ) : (
+                                moduleDiscussionPosts.map((post) => {
+                                  const isMsgWarning = post.isWarning === true;
+                                  const isMsgModerator = post.role === "Professor" || post.role === "Admin";
+                                  const displayAuthorName = isMsgWarning ? post.role : post.name;
+                                  return (
+                                    <div
+                                      key={post.id}
+                                      className={`border rounded-xl p-3 flex gap-3 animate-scaleIn transition-all ${isMsgWarning
+                                          ? "bg-amber-500/5 border-amber-500/25 border-l-4 border-l-amber-500"
+                                          : "bg-brand-bg/50 border border-brand-border/35"
+                                        }`}
+                                    >
+                                      <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 text-brand-bg select-none ${isMsgWarning
+                                          ? "bg-gradient-to-br from-amber-500 to-yellow-600"
+                                          : isMsgModerator
+                                            ? "bg-gradient-to-br from-emerald-400 to-teal-600"
+                                            : "bg-gradient-to-br from-brand-cyan to-blue-600"
+                                        }`}>
+                                        {getAvatarInitials(displayAuthorName)}
+                                      </div>
+                                      <div className="flex-grow flex flex-col gap-1">
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-xs font-bold text-brand-text">{displayAuthorName}</span>
+                                          <span className={`text-[8px] font-extrabold px-1 py-0.2 rounded uppercase select-none ${isMsgModerator
+                                              ? "bg-brand-cyan/15 text-brand-cyan border border-brand-cyan/30"
+                                              : "bg-brand-bg border border-brand-border/40 text-brand-muted"
+                                            }`}>
+                                            {post.role}
+                                          </span>
+                                          <span className="text-[9px] text-brand-muted font-mono">
+                                            {new Date(post.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                          </span>
+                                        </div>
+                                        <p className={`text-xs whitespace-pre-wrap leading-relaxed ${isMsgWarning ? "text-amber-300 italic" : "text-brand-text/90"}`}>
+                                          {post.message}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </div>
+
+                            {/* Status Indicator */}
+                            <div className="mb-4">
+                              {completedTopics[888888] ? (
+                                <div className="bg-green-500/10 border border-green-500/25 text-green-400 p-3 rounded-xl text-xs flex items-center gap-2 animate-scaleIn">
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                                  <span>Module discussion completed. You are now cleared to start the <strong>Interactive Subnetting Activity</strong>!</span>
+                                </div>
+                              ) : (
+                                <div className="bg-yellow-500/10 border border-yellow-500/25 text-yellow-500 p-3 rounded-xl text-xs flex items-center gap-2 animate-pulse">
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
+                                  <span>Please scroll to the bottom of the discussion feed to unlock the next activity.</span>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Input Form */}
+                            <form onSubmit={handlePostModuleDiscussion} className="flex flex-col gap-2 shrink-0">
+                              {moduleDiscussionError && <span className="text-red-400 text-xs">{moduleDiscussionError}</span>}
+                              <div className="flex gap-2">
+                                <input
+                                  type="text"
+                                  value={newModuleDiscussionMsg}
+                                  onChange={(e) => {
+                                    setNewModuleDiscussionMsg(e.target.value);
+                                    if (moduleDiscussionError) setModuleDiscussionError("");
+                                  }}
+                                  placeholder="Post a question or comment about this module..."
+                                  className="flex-grow bg-brand-bg/50 border border-brand-border/40 focus:border-brand-cyan focus:outline-none rounded-xl px-4 py-2.5 text-xs text-brand-text placeholder-brand-muted/70"
+                                />
+                                <button
+                                  type="submit"
+                                  disabled={!newModuleDiscussionMsg.trim()}
+                                  className="px-5 py-2.5 bg-brand-cyan hover:bg-brand-cyan-hover disabled:opacity-50 disabled:cursor-not-allowed text-brand-bg font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md cursor-pointer shrink-0"
+                                >
+                                  Post Message
+                                </button>
+                              </div>
+                            </form>
+                          </div>
                         ) : activeMaterials.length === 0 ? (
                           <div className="flex-grow flex flex-col items-center justify-center text-center p-8 border border-dashed border-brand-border/30 rounded-2xl">
                             <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-brand-muted mb-3"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" /><path d="M6 6h10M6 10h10" /></svg>
@@ -1986,8 +2612,8 @@ export default function StudentCurriculum() {
                                     {/* Video watch status label */}
                                     {mat.type === "video" && youtubeEmbedUrl && (
                                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border inline-flex items-center gap-1 whitespace-nowrap ${watchedVideos[mat.id]
-                                          ? "bg-green-500/10 border-green-500/20 text-green-400"
-                                          : "bg-yellow-500/10 border-yellow-500/20 text-yellow-500"
+                                        ? "bg-green-500/10 border-green-500/20 text-green-400"
+                                        : "bg-yellow-500/10 border-yellow-500/20 text-yellow-500"
                                         }`}>
                                         {watchedVideos[mat.id] ? (
                                           <>
@@ -2147,10 +2773,10 @@ export default function StudentCurriculum() {
                                     onClick={() => toggleTopicCompletion(selectedTopic.id)}
                                     disabled={!isVideoWatched}
                                     className={`px-4 py-2.5 rounded-lg font-bold text-[10px] uppercase tracking-wider transition-colors shrink-0 select-none ${isTopicCompleted
-                                        ? "bg-green-500 hover:bg-green-600 text-white cursor-pointer"
-                                        : !isVideoWatched
-                                          ? "bg-brand-muted/20 text-brand-muted/50 border border-brand-border/40 cursor-not-allowed"
-                                          : "bg-brand-cyan hover:bg-brand-cyan-hover text-brand-bg cursor-pointer"
+                                      ? "bg-green-500 hover:bg-green-600 text-white cursor-pointer"
+                                      : !isVideoWatched
+                                        ? "bg-brand-muted/20 text-brand-muted/50 border border-brand-border/40 cursor-not-allowed"
+                                        : "bg-brand-cyan hover:bg-brand-cyan-hover text-brand-bg cursor-pointer"
                                       }`}
                                   >
                                     {isTopicCompleted ? (

@@ -2562,12 +2562,12 @@ export default function ProfessorModules() {
                                         {/* TEXT */}
                                         {mat.type === "text" && (
                                           <div
-                                            className={`whitespace-pre-wrap text-[11px] leading-relaxed bg-brand-bg/40 p-3.5 border border-brand-border/30 rounded-xl ${
+                                            className={`whitespace-pre-wrap text-xs md:text-sm leading-relaxed bg-brand-bg/30 p-4 border border-brand-border/30 rounded-xl text-brand-text/90 ${
                                               mat.textStyle === "bold" ? "font-bold text-brand-text" :
-                                              mat.textStyle === "italic" ? "italic text-brand-text/90" :
-                                              mat.textStyle === "heading" ? "text-xs font-extrabold text-brand-cyan border-l-2 border-brand-cyan pl-2 py-0.5" :
-                                              mat.textStyle === "quote" ? "border-l-4 border-brand-border/60 pl-3 italic text-brand-muted bg-brand-bg/25" :
-                                              mat.textStyle === "code" ? "font-mono bg-black/40 border border-brand-border/40 px-2.5 py-1.5 rounded-lg text-green-400 text-[10px]" :
+                                              mat.textStyle === "italic" ? "italic text-brand-text/85 pl-3 border-l border-brand-border/20" :
+                                              mat.textStyle === "heading" ? "text-sm md:text-base font-extrabold text-brand-cyan border-b border-brand-border/20 pb-1 mt-2 mb-1" :
+                                              mat.textStyle === "quote" ? "border-l-4 border-brand-cyan pl-4 py-2 italic text-brand-muted bg-brand-cyan/5 rounded-r-lg my-2" :
+                                              mat.textStyle === "code" ? "font-mono bg-black/50 border border-brand-border/55 px-3 py-2 rounded-lg text-emerald-400 text-[11px] my-2 overflow-x-auto block leading-normal" :
                                               "text-brand-text/90"
                                             }`}
                                             dangerouslySetInnerHTML={{ __html: mat.content }}

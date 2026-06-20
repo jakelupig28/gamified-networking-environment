@@ -19,6 +19,7 @@ export default function ProfessorDashboard() {
   const [activeStudentsCount, setActiveStudentsCount] = useState(0);
   const [modules, setModules] = useState<any[]>([]);
   const [pendingStudents, setPendingStudents] = useState<any[]>([]);
+  const [students, setStudents] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -27,11 +28,15 @@ export default function ProfessorDashboard() {
         const usersRes = await fetch("/api/users");
         const usersData = await usersRes.json();
         if (usersData.success && usersData.users) {
-          const admitted = usersData.users.filter(
-            (u: any) => u.role === "Student" && u.status === "admitted"
+          const allStudents = usersData.users.filter(
+            (u: any) => u.role === "Student"
           );
-          const pending = usersData.users.filter(
-            (u: any) => u.role === "Student" && (u.status === "pending" || !u.status)
+          setStudents(allStudents);
+          const admitted = allStudents.filter(
+            (u: any) => u.status === "admitted"
+          );
+          const pending = allStudents.filter(
+            (u: any) => u.status === "pending" || !u.status
           );
           setActiveStudentsCount(admitted.length);
           setPendingCount(pending.length);
@@ -176,6 +181,33 @@ export default function ProfessorDashboard() {
       </div>
     );
   }
+
+  const calculateStudentProgress = (student: any) => {
+    if (modules.length === 0) return 0;
+    const completed = student.completedTopics || {};
+    const watched = student.watchedVideos || {};
+    
+    let totalTopics = 0;
+    let progressSum = 0;
+    
+    modules.forEach((mod) => {
+      mod.topics.forEach((topic: any) => {
+        totalTopics += 1;
+        if (completed[topic.id]) {
+          progressSum += 100;
+        } else {
+          const videoMat = topic.materials?.find((m: any) => m.type === "video") ||
+                           topic.subtopics?.flatMap((s: any) => s.materials || []).find((m: any) => m.type === "video");
+          if (videoMat && watched[videoMat.id]) {
+            progressSum += 50;
+          }
+        }
+      });
+    });
+    
+    if (totalTopics === 0) return 0;
+    return Math.round(progressSum / totalTopics);
+  };
 
   return (
     <div className="min-h-screen bg-brand-bg pl-64 flex flex-col">
@@ -352,12 +384,117 @@ export default function ProfessorDashboard() {
                    <span>Edit Profile Settings</span>
                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
                  </button>
-               </div>
-             </div>
-           </div>
-        </div>
+                </div>
+              </div>
+            </div>
+         </div>
 
-      </main>
+         {/* Student Performance & Scores Panel */}
+         <div className="mt-8 bg-brand-card border border-brand-border rounded-xl p-6 shadow-md">
+           <div className="flex justify-between items-center mb-6">
+             <h2 className="text-lg font-bold">Student Performance & Roster</h2>
+             <span className="text-xs text-brand-muted font-mono">{students.length} Student(s) registered</span>
+           </div>
+
+           {students.length === 0 ? (
+             <div className="text-center py-10 text-brand-muted text-sm border border-dashed border-brand-border/40 rounded-xl bg-brand-bg/25">
+               No students are currently registered in the course.
+             </div>
+           ) : (
+             <div className="overflow-x-auto">
+               <table className="w-full text-left text-xs border-collapse">
+                 <thead>
+                   <tr className="border-b border-brand-border/40 text-brand-muted uppercase tracking-wider text-[10px] font-bold">
+                     <th className="py-3.5 px-4">Student Details</th>
+                     <th className="py-3.5 px-4">Status</th>
+                     <th className="py-3.5 px-4 text-center">Overall Progress</th>
+                     <th className="py-3.5 px-4 text-center">Pre-test Scores</th>
+                     <th className="py-3.5 px-4 text-center">Interactive Activities</th>
+                   </tr>
+                 </thead>
+                 <tbody className="divide-y divide-brand-border/20">
+                   {students.map((student) => {
+                     const progress = calculateStudentProgress(student);
+                     
+                     // Format Pre-tests
+                     const pScores = student.pretestScores || {};
+                     const pretestDisplay = Object.keys(pScores).length > 0 
+                       ? Object.entries(pScores).map(([mId, score]) => {
+                           const mTitle = modules.find(m => String(m.id) === String(mId))?.title || `Mod ${mId}`;
+                           const maxQuestions = modules.find(m => String(m.id) === String(mId))?.pretest?.length || 5;
+                           return `${mTitle}: ${score}/${maxQuestions}`;
+                         }).join(", ")
+                       : "No pre-tests taken";
+
+                     // Format Interactive subnetting
+                     const iScores = student.interactiveScores || {};
+
+                     return (
+                       <tr key={student.id} className="hover:bg-brand-bg/25 transition-colors">
+                         <td className="py-4 px-4">
+                           <div className="font-bold text-brand-text text-sm">{student.name}</div>
+                           <div className="text-[10px] text-brand-muted font-mono mt-0.5">
+                             ID: {student.studentId || "N/A"} • {student.email}
+                           </div>
+                           {student.course && (
+                             <div className="text-[9px] text-brand-cyan/85 mt-0.5">
+                               {student.course} - Year {student.yearLevel || "N/A"} (Sec {student.section || "N/A"})
+                             </div>
+                           )}
+                         </td>
+                         <td className="py-4 px-4">
+                           <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${
+                             student.status === "admitted"
+                               ? "bg-green-500/10 border-green-500/20 text-green-400"
+                               : student.status === "rejected"
+                                 ? "bg-red-500/10 border-red-500/20 text-red-400"
+                                 : "bg-yellow-500/10 border-yellow-500/20 text-yellow-500"
+                           }`}>
+                             {student.status === "admitted" ? "Admitted" : student.status === "rejected" ? "Rejected" : "Pending"}
+                           </span>
+                         </td>
+                         <td className="py-4 px-4 text-center">
+                           <div className="flex flex-col items-center gap-1.5">
+                             <span className="font-bold text-brand-text text-sm font-mono">{progress}%</span>
+                             <div className="w-24 h-2 bg-brand-bg rounded-full overflow-hidden border border-brand-border/20">
+                               <div className="h-full bg-brand-cyan" style={{ width: `${progress}%` }} />
+                             </div>
+                           </div>
+                         </td>
+                         <td className="py-4 px-4 text-center font-semibold text-brand-text">
+                           <div className="max-w-[200px] mx-auto text-xs truncate" title={pretestDisplay}>
+                             {pretestDisplay}
+                           </div>
+                         </td>
+                         <td className="py-4 px-4 text-center text-brand-text">
+                           <div className="max-w-[250px] mx-auto text-[11px] font-mono leading-relaxed">
+                             {Object.keys(iScores).length > 0 ? (
+                               Object.entries(iScores).map(([mId, scores]: [string, any]) => (
+                                 <div key={mId} className="flex flex-col items-center border border-brand-border/30 rounded-lg p-1.5 bg-brand-bg/40 max-w-[240px] mx-auto gap-1">
+                                   <span className="text-[9px] font-bold text-brand-cyan uppercase">Subnetting Score</span>
+                                   <span className="font-bold text-xs">{(scores.vlsm || 0) + (scores.anding || 0) + (scores.ipv6 || 0)} / 20</span>
+                                   <div className="flex gap-2 text-[9px] text-brand-muted font-bold">
+                                     <span>VLSM: {scores.vlsm || 0}/8</span>
+                                     <span>AND: {scores.anding || 0}/9</span>
+                                     <span>IPv6: {scores.ipv6 || 0}/3</span>
+                                   </div>
+                                 </div>
+                               ))
+                             ) : (
+                               <span className="text-brand-muted italic">No activities submitted</span>
+                             )}
+                           </div>
+                         </td>
+                       </tr>
+                     );
+                   })}
+                 </tbody>
+               </table>
+             </div>
+           )}
+         </div>
+ 
+       </main>
     </div>
   );
 }

@@ -80,6 +80,14 @@ export async function PUT(req: Request) {
       ...updateFields
     };
 
+    // Reset status to pending and clear rejectMessage if user was rejected and profile details are updated
+    const profileUpdateKeys = ['firstName', 'lastName', 'middleName', 'studentId', 'course', 'section', 'birthdate', 'age', 'gender', 'address'];
+    const isProfileUpdate = Object.keys(updateFields).some(key => profileUpdateKeys.includes(key));
+    if (users[userIdx].status === 'rejected' && isProfileUpdate) {
+      users[userIdx].status = 'pending';
+      users[userIdx].rejectMessage = '';
+    }
+
     // If newEmail is provided, check for conflicts and update
     if (newEmail && newEmail.toLowerCase() !== email.toLowerCase()) {
       const emailExists = users.some((u: any, idx: number) => idx !== userIdx && u.email.toLowerCase() === newEmail.toLowerCase());

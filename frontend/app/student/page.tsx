@@ -14,11 +14,13 @@ type Material = {
 
 type Subtopic = {
   id: number;
+  title?: string;
   materials?: Material[];
 };
 
 type Topic = {
   id: number;
+  title?: string;
   materials?: Material[];
   subtopics?: Subtopic[];
 };
@@ -39,6 +41,8 @@ type UserProfile = {
   section?: string;
   admittedSubject?: string;
   admittedTerm?: string;
+  status?: string;
+  rejectMessage?: string;
 };
 
 export default function StudentDashboard() {
@@ -103,6 +107,29 @@ export default function StudentDashboard() {
           );
           if (profile) {
             setUserProfile(profile);
+            
+            // Sync server-side scores/progress back to localStorage
+            if (profile.completedTopics) {
+              localStorage.setItem(`completed_topics_${savedNameFull}`, JSON.stringify(profile.completedTopics));
+              setCompletedTopics(profile.completedTopics);
+            }
+            if (profile.watchedVideos) {
+              localStorage.setItem(`watched_videos_${savedNameFull}`, JSON.stringify(profile.watchedVideos));
+              setWatchedVideos(profile.watchedVideos);
+            }
+            if (profile.completedPretests) {
+              localStorage.setItem(`completed_pretests_${savedNameFull}`, JSON.stringify(profile.completedPretests));
+              setCompletedPretests(profile.completedPretests);
+            }
+            if (profile.pretestScores) {
+              localStorage.setItem(`pretest_scores_${savedNameFull}`, JSON.stringify(profile.pretestScores));
+              setPretestScores(profile.pretestScores);
+            }
+            if (profile.interactiveScores) {
+              Object.entries(profile.interactiveScores).forEach(([mId, scores]) => {
+                localStorage.setItem(`interactive_scores_${savedNameFull}_${mId}`, JSON.stringify(scores));
+              });
+            }
           }
         }
 
@@ -127,28 +154,37 @@ export default function StudentDashboard() {
     if (mods.length === 0) return mods;
     return mods.map((mod, idx) => {
       if (idx === 0) {
-        const hasActivity = mod.topics.some(t => t.id === 999999);
-        if (!hasActivity) {
-          return {
-            ...mod,
-            topics: [
-              ...mod.topics,
-              {
-                id: 999999,
-                title: "Interactive Subnetting Activity",
-                materials: [
-                  {
-                    id: 9999991,
-                    type: "text",
-                    title: "Hands-on Exercises",
-                    content: "interactive-activity-placeholder"
-                  }
-                ],
-                subtopics: []
-              }
-            ]
-          };
-        }
+        let newTopics = mod.topics.filter(t => t.id !== 999999 && t.id !== 888888);
+        newTopics.push({
+          id: 888888,
+          title: "Module Discussion Forum",
+          materials: [
+            {
+              id: 8888881,
+              type: "text",
+              title: "Module Discussion",
+              content: "discussion-forum-placeholder"
+            }
+          ],
+          subtopics: []
+        });
+        newTopics.push({
+          id: 999999,
+          title: "Interactive Subnetting Activity",
+          materials: [
+            {
+              id: 9999991,
+              type: "text",
+              title: "Hands-on Exercises",
+              content: "interactive-activity-placeholder"
+            }
+          ],
+          subtopics: []
+        });
+        return {
+          ...mod,
+          topics: newTopics
+        };
       }
       return mod;
     });
@@ -225,15 +261,102 @@ export default function StudentDashboard() {
           <div className="text-[10px] font-bold uppercase tracking-widest text-brand-cyan mb-2">Student Portal</div>
           <h1 className="text-3xl font-bold mb-3 tracking-tight">Welcome back, {userName}.</h1>
           <p className="text-brand-muted text-sm max-w-xl leading-relaxed">
-            {overallProgress >= 100
-              ? "Congratulations! You have completed all course modules in your syllabus. Excellent work!"
-              : `You have completed ${overallProgress}% of the course materials. Keep studying to reach your goals.`}
+            {isLoading
+              ? "Loading your dashboard..."
+              : userProfile?.status !== "admitted"
+                ? "Your registration is currently being verified. Please review your status details below."
+                : overallProgress >= 100
+                  ? "Congratulations! You have completed all course modules in your syllabus. Excellent work!"
+                  : `You have completed ${overallProgress}% of the course materials. Keep studying to reach your goals.`}
           </p>
         </header>
 
         {isLoading ? (
           <div className="flex justify-center items-center py-20">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-cyan"></div>
+          </div>
+        ) : userProfile && userProfile.status !== "admitted" ? (
+          <div className="flex flex-col gap-8 animate-all duration-300">
+            {userProfile.status === "rejected" ? (
+              <div className="bg-brand-card border border-red-500/30 rounded-2xl p-8 shadow-2xl flex flex-col gap-6 max-w-3xl">
+                <div className="flex items-center gap-4 border-b border-red-500/10 pb-4">
+                  <div className="p-3.5 bg-red-500/10 text-red-500 rounded-2xl border border-red-500/20 shrink-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-red-400">Registration Status</span>
+                    <h2 className="text-xl font-bold text-red-500 mt-0.5">Registration Rejected</h2>
+                  </div>
+                </div>
+                
+                <div className="flex flex-col gap-2">
+                  <p className="text-sm font-semibold text-brand-text">Your student registration was rejected by the professor.</p>
+                  {userProfile.rejectMessage && (
+                    <div className="bg-red-500/5 border border-red-500/20 rounded-xl p-4 mt-2">
+                      <div className="text-[10px] font-bold text-red-400 uppercase tracking-wider mb-1">Feedback from Professor:</div>
+                      <p className="text-xs text-brand-text font-medium leading-relaxed italic">"{userProfile.rejectMessage}"</p>
+                    </div>
+                  )}
+                  <p className="text-xs text-brand-muted mt-2 leading-relaxed">
+                    Please review your profile details and update them in Settings. Correcting your details and saving will resubmit your registration to the professor for review.
+                  </p>
+                </div>
+
+                <div className="flex pt-2">
+                  <Link href="/student/settings" className="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-xl transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-2">
+                    Edit Profile Settings
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-brand-card border border-brand-border rounded-2xl p-8 shadow-2xl flex flex-col gap-6 max-w-3xl">
+                <div className="flex items-center gap-4 border-b border-brand-border/40 pb-4">
+                  <div className="p-3.5 bg-yellow-500/10 text-yellow-500 rounded-2xl border border-yellow-500/20 shrink-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-brand-cyan">Registration Status</span>
+                    <h2 className="text-xl font-bold mt-0.5">Awaiting Approval</h2>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <p className="text-sm font-semibold text-brand-text">Your student profile is currently pending validation by your professor.</p>
+                  <p className="text-xs text-brand-muted leading-relaxed">
+                    Once your professor verifies your registration details, you will be granted access to the course syllabus, subjects, pre-tests, and network topology labs.
+                  </p>
+                </div>
+
+                <div className="bg-brand-bg/50 border border-brand-border/30 rounded-xl p-5 mt-2">
+                  <h4 className="text-[10px] font-bold text-brand-cyan uppercase tracking-wider mb-3">Submitted Registration Details</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <span className="text-[9px] text-brand-muted uppercase font-bold tracking-wider">Student ID</span>
+                      <p className="text-xs font-mono font-semibold">{userProfile.studentId || "N/A"}</p>
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-brand-muted uppercase font-bold tracking-wider">Section</span>
+                      <p className="text-xs font-semibold">{userProfile.section || "N/A"}</p>
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-brand-muted uppercase font-bold tracking-wider">Course / Program</span>
+                      <p className="text-xs font-semibold">{userProfile.course || "N/A"}</p>
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-brand-muted uppercase font-bold tracking-wider">Full Name</span>
+                      <p className="text-xs font-semibold">{userProfile.name}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-4 pt-2">
+                  <Link href="/student/settings" className="bg-brand-bg hover:bg-brand-bg/80 border border-brand-border text-brand-text font-bold py-3 px-6 rounded-xl transition-all text-xs uppercase tracking-wider">
+                    Modify Details
+                  </Link>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

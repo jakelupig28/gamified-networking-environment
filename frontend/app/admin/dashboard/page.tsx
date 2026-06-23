@@ -65,7 +65,7 @@ export default function AdminDashboardOverview() {
   // Compute Student Progress Bar Chart Data
   const totalTopicsCount = modules.reduce((acc, m) => {
     const topicsList = m.topics || [];
-    return acc + topicsList.filter((t: any) => t.id !== 888888 && t.id !== 999999).length;
+    return acc + topicsList.filter((t: any) => t.id < 88888800 || t.id > 99999999).length;
   }, 0) || 5; // fallback to 5 to prevent division by zero
 
   return (

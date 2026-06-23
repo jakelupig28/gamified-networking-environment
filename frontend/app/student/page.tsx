@@ -150,43 +150,65 @@ export default function StudentDashboard() {
     fetchData();
   }, []);
 
+  const getModuleIndex = (moduleId: number): number => {
+    const ids = [
+      1782134355228, // Introduction to Networking
+      1782182808093, // Communicating Over The InternetPart 1
+      1782181968596, // Communicating Over The Internet Part 2
+      1782184909611, // Addressing IPv4
+      1782185665993, // Ethernet Part 1
+      1782186311891, // Ethernet Part 2
+      1782186928370, // Network Configuration
+      1782197552474, // Basic Router Configuration
+      1782198533015, // Routing Protocol Concepts
+      1782199846377, // Static Routing Part 1
+      1782200580841, // Static Routing Part 2
+      1782203599448  // Advance Static Routing
+    ];
+    const idx = ids.indexOf(moduleId);
+    return idx !== -1 ? idx : 0;
+  };
+
   const ensureInteractiveActivity = (mods: Module[]): Module[] => {
     if (mods.length === 0) return mods;
-    return mods.map((mod, idx) => {
-      if (idx === 0) {
-        let newTopics = mod.topics.filter(t => t.id !== 999999 && t.id !== 888888);
-        newTopics.push({
-          id: 888888,
-          title: "Module Discussion Forum",
-          materials: [
-            {
-              id: 8888881,
-              type: "text",
-              title: "Module Discussion",
-              content: "discussion-forum-placeholder"
-            }
-          ],
-          subtopics: []
-        });
-        newTopics.push({
-          id: 999999,
-          title: "Interactive Subnetting Activity",
-          materials: [
-            {
-              id: 9999991,
-              type: "text",
-              title: "Hands-on Exercises",
-              content: "interactive-activity-placeholder"
-            }
-          ],
-          subtopics: []
-        });
-        return {
-          ...mod,
-          topics: newTopics
-        };
-      }
-      return mod;
+    return mods.map((mod) => {
+      const idx = getModuleIndex(mod.id);
+      let newTopics = mod.topics.filter(t => 
+        (t.id < 88888800 || t.id > 99999999) &&
+        t.title !== "Module Discussion Forum" &&
+        t.title !== "Interactive Subnetting Activity" &&
+        t.title !== "Interactive Activity"
+      );
+      newTopics.push({
+        id: 88888800 + idx,
+        title: "Module Discussion Forum",
+        materials: [
+          {
+            id: 88888810 + idx,
+            type: "text",
+            title: "Module Discussion",
+            content: "discussion-forum-placeholder"
+          }
+        ],
+        subtopics: []
+      });
+      newTopics.push({
+        id: 99999900 + idx,
+        title: "Interactive Activity",
+        materials: [
+          {
+            id: 99999910 + idx,
+            type: "text",
+            title: "Hands-on Exercises",
+            content: "interactive-activity-placeholder"
+          }
+        ],
+        subtopics: []
+      });
+      return {
+        ...mod,
+        topics: newTopics
+      };
     });
   };
 

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Sidebar from "@/components/Sidebar";
+import { INTERACTIVE_ACTIVITIES_CONFIG } from "@/data/interactiveActivities";
 
 const CircularProgress = ({ progress, size = 20, strokeWidth = 2, isSelected = false }: { progress: number, size?: number, strokeWidth?: number, isSelected?: boolean }) => {
   const radius = (size - strokeWidth) / 2;
@@ -57,46 +58,47 @@ interface InteractiveSubnettingActivityProps {
 }
 
 function InteractiveSubnettingActivity({ onComplete, isCompleted, handleSelectNextTopic, moduleId }: InteractiveSubnettingActivityProps) {
-  const [activeTab, setActiveTab] = useState<"vlsm" | "anding" | "ipv6">("vlsm");
+  const ids = [
+    1782134355228, // Introduction to Networking
+    1782182808093, // Communicating Over The InternetPart 1
+    1782181968596, // Communicating Over The Internet Part 2
+    1782184909611, // Addressing IPv4
+    1782185665993, // Ethernet Part 1
+    1782186311891, // Ethernet Part 2
+    1782186928370, // Network Configuration
+    1782197552474, // Basic Router Configuration
+    1782198533015, // Routing Protocol Concepts
+    1782199846377, // Static Routing Part 1
+    1782200580841, // Static Routing Part 2
+    1782203599448  // Advance Static Routing
+  ];
+  const moduleIdx = ids.indexOf(moduleId) !== -1 ? ids.indexOf(moduleId) : 0;
 
-  // Task 1: VLSM States
-  const [vlsmPrefixes, setVlsmPrefixes] = useState<Record<string, string>>({
-    Sales: "",
-    IT: "",
-    HR: "",
-    WAN: "",
-  });
+  // Parts (Part 1 and Part 2) modules get 2 tasks, others get 3 tasks
+  const isPartModule = [1, 2, 4, 5, 9, 10].includes(moduleIdx);
+  const totalTasks = isPartModule ? 2 : 3;
 
-  const [vlsmNetworks, setVlsmNetworks] = useState<Record<string, string>>({
-    Sales: "",
-    IT: "",
-    HR: "",
-    WAN: "",
-  });
+  const [activeTab, setActiveTab] = useState<number>(1);
+  const [activeDeckCard, setActiveDeckCard] = useState<{ val: string; label: string } | null>(null);
 
-  const vlsmCorrectPrefixes: Record<string, string> = {
-    Sales: "/25",
-    IT: "/26",
-    HR: "/27",
-    WAN: "/30",
-  };
+  // Secure activity & timer states
+  const [activityStarted, setActivityStarted] = useState<boolean>(false);
+  const [isFullscreenActive, setIsFullscreenActive] = useState<boolean>(false);
+  const [warningsLeft, setWarningsLeft] = useState<number>(3);
+  const [timerLeft, setTimerLeft] = useState<number>(720); // 12 minutes
+  const [isLocked, setIsLocked] = useState<boolean>(false);
 
-  const vlsmCorrectNetworks: Record<string, string> = {
-    Sales: "192.168.10.0",
-    IT: "192.168.10.128",
-    HR: "192.168.10.192",
-    WAN: "192.168.10.224",
-  };
+  // User input states
+  const [task1Answers, setTask1Answers] = useState<Record<string, string>>({});
+  const [task2Answers, setTask2Answers] = useState<Record<string, string>>({});
+  const [task3Answers, setTask3Answers] = useState<Record<string, string>>({});
 
-  const isVlsmCorrect =
-    Object.keys(vlsmCorrectPrefixes).every(k => vlsmPrefixes[k] === vlsmCorrectPrefixes[k]) &&
-    Object.keys(vlsmCorrectNetworks).every(k => vlsmNetworks[k] === vlsmCorrectNetworks[k]);
-
-  // Task 2: Bitwise ANDing States
+  // Module 4 Task 2 states (Bitwise ANDing)
   const [andingBits, setAndingBits] = useState<number[]>([0, 0, 0, 0, 0, 0, 0, 0]);
-  const [andingDecimalResult, setAndingDecimalResult] = useState<string>("");
+  const [andingDecimal, setAndingDecimal] = useState<string>("");
 
   const toggleAndingBit = (idx: number) => {
+    if (isLocked) return;
     setAndingBits(prev => {
       const copy = [...prev];
       copy[idx] = copy[idx] === 1 ? 0 : 1;
@@ -104,29 +106,14 @@ function InteractiveSubnettingActivity({ onComplete, isCompleted, handleSelectNe
     });
   };
 
-  const correctAndingBits = [0, 1, 0, 0, 0, 0, 0, 0];
-  const correctAndingDecimal = "64";
-
-  const isAndingCorrect =
-    andingBits.every((b, idx) => b === correctAndingBits[idx]) &&
-    andingDecimalResult.trim() === correctAndingDecimal;
-
-  // Task 3: IPv6 Address Anatomy States
-  const [ipv6Prefix, setIpv6Prefix] = useState<string>("");
-  const [ipv6Subnet, setIpv6Subnet] = useState<string>("");
-  const [ipv6Interface, setIpv6Interface] = useState<string>("");
-
-  const isIpv6Correct =
-    ipv6Prefix === "2001:0db8:acad" &&
-    ipv6Subnet === "0001" &&
-    ipv6Interface === "0000:0000:0000:0001";
-
   // Score states
-  const [vlsmScore, setVlsmScore] = useState<number | null>(null);
-  const [andingScore, setAndingScore] = useState<number | null>(null);
-  const [ipv6Score, setIpv6Score] = useState<number | null>(null);
+  const [task1Score, setTask1Score] = useState<number | null>(null);
+  const [task2Score, setTask2Score] = useState<number | null>(null);
+  const [task3Score, setTask3Score] = useState<number | null>(null);
 
-  // Load scores
+  const isCompletedFinal = isCompleted || (task1Score !== null && task2Score !== null && (totalTasks === 2 || task3Score !== null));
+
+  // Load scores and reset inputs when module changes
   useEffect(() => {
     const savedName = localStorage.getItem("userName") || "Student";
     const key = `interactive_scores_${savedName}_${moduleId}`;
@@ -134,14 +121,332 @@ function InteractiveSubnettingActivity({ onComplete, isCompleted, handleSelectNe
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
-        if (parsed.vlsm !== undefined) setVlsmScore(parsed.vlsm);
-        if (parsed.anding !== undefined) setAndingScore(parsed.anding);
-        if (parsed.ipv6 !== undefined) setIpv6Score(parsed.ipv6);
+        setTask1Score(parsed.task1 !== undefined ? parsed.task1 : null);
+        setTask2Score(parsed.task2 !== undefined ? parsed.task2 : null);
+        setTask3Score(parsed.task3 !== undefined ? parsed.task3 : null);
       } catch (e) {
         console.error(e);
       }
+    } else {
+      setTask1Score(null);
+      setTask2Score(null);
+      setTask3Score(null);
     }
+    setActiveTab(1);
+    setTask1Answers({});
+    setTask2Answers({});
+    setTask3Answers({});
+    setAndingBits([0, 0, 0, 0, 0, 0, 0, 0]);
+    setAndingDecimal("");
+    setActiveDeckCard(null);
+    setActivityStarted(false);
+    setIsFullscreenActive(false);
+    setWarningsLeft(3);
+    setTimerLeft(720);
+    setIsLocked(false);
   }, [moduleId]);
+
+  // Auto-complete course topic once all sub-tasks are submitted
+  useEffect(() => {
+    if (task1Score !== null && task2Score !== null && (totalTasks === 2 || task3Score !== null)) {
+      onComplete();
+    }
+  }, [task1Score, task2Score, task3Score, totalTasks, onComplete]);
+
+  // Start Secure Fullscreen session
+  const handleStartActivity = async () => {
+    try {
+      const elem = document.documentElement;
+      if (elem.requestFullscreen) {
+        await elem.requestFullscreen();
+      } else if ((elem as any).webkitRequestFullscreen) {
+        await (elem as any).webkitRequestFullscreen();
+      } else if ((elem as any).msRequestFullscreen) {
+        await (elem as any).msRequestFullscreen();
+      }
+      setIsFullscreenActive(true);
+      setActivityStarted(true);
+    } catch (e) {
+      console.error("Fullscreen request blocked", e);
+      setIsFullscreenActive(true);
+      setActivityStarted(true);
+    }
+  };
+
+  // Cheat Prevention Callback
+  const handleCheatSubmit = (reason: string) => {
+    setIsLocked(true);
+    if (task1Score === null) {
+      setTask1Score(0);
+      saveScore("task1", 0);
+    }
+    if (task2Score === null) {
+      setTask2Score(0);
+      saveScore("task2", 0);
+    }
+    if (totalTasks === 3 && task3Score === null) {
+      setTask3Score(0);
+      saveScore("task3", 0);
+    }
+    if (document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {});
+    } else if ((document as any).webkitExitFullscreen) {
+      (document as any).webkitExitFullscreen();
+    }
+  };
+
+  // Time Out Callback
+  const handleTimeOutSubmit = () => {
+    setIsLocked(true);
+    if (task1Score === null) {
+      const s = checkCurrentTaskScore(1);
+      setTask1Score(s);
+      saveScore("task1", s);
+    }
+    if (task2Score === null) {
+      const s = checkCurrentTaskScore(2);
+      setTask2Score(s);
+      saveScore("task2", s);
+    }
+    if (totalTasks === 3 && task3Score === null) {
+      const s = checkCurrentTaskScore(3);
+      setTask3Score(s);
+      saveScore("task3", s);
+    }
+    if (document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {});
+    }
+  };
+
+  const checkCurrentTaskScore = (taskNum: number): number => {
+    let score = 0;
+    if (taskNum === 1) {
+      switch (moduleIdx) {
+        case 0:
+          if (task1Answers.Router === "RouterOption") score++;
+          if (task1Answers.Switch === "SwitchOption") score++;
+          if (task1Answers.Host === "HostOption") score++;
+          if (task1Answers.Firewall === "FirewallOption") score++;
+          break;
+        case 1:
+          if (task1Answers.OSIApp === "TCPApp") score++;
+          if (task1Answers.OSITrans === "TCPTrans") score++;
+          if (task1Answers.OSINet === "TCPInternet") score++;
+          if (task1Answers.OSIPhys === "TCPNetAccess") score++;
+          break;
+        case 2:
+          if (task1Answers.DNS === "DNSOption") score++;
+          if (task1Answers.HTTP === "HTTPOption") score++;
+          if (task1Answers.DHCP === "DHCPOption") score++;
+          if (task1Answers.SMTP === "SMTPOption") score++;
+          break;
+        case 3:
+          if (task1Answers.ip1 === "PrivateClassA") score++;
+          if (task1Answers.ip2 === "PrivateClassC") score++;
+          if (task1Answers.ip3 === "PublicClassA") score++;
+          if (task1Answers.ip4 === "PrivateClassB") score++;
+          break;
+        case 4:
+          if (task1Answers.oui === "OUI") score++;
+          if (task1Answers.nic === "NIC") score++;
+          break;
+        case 5:
+          if (task1Answers.step1 === "1") score++;
+          if (task1Answers.step2 === "2") score++;
+          if (task1Answers.step3 === "3") score++;
+          if (task1Answers.step4 === "4") score++;
+          if (task1Answers.step5 === "5") score++;
+          break;
+        case 6:
+          if (task1Answers.RouterUser === "UserEXEC") score++;
+          if (task1Answers.RouterPriv === "PrivEXEC") score++;
+          if (task1Answers.RouterGlobal === "GlobalConfig") score++;
+          if (task1Answers.RouterInterface === "InterfaceConfig") score++;
+          break;
+        case 7:
+          if (task1Answers.RAM === "RAMOption") score++;
+          if (task1Answers.NVRAM === "NVRAMOption") score++;
+          if (task1Answers.Flash === "FlashOption") score++;
+          if (task1Answers.ROM === "ROMOption") score++;
+          break;
+        case 8:
+          if (task1Answers.route === "route3") score++;
+          break;
+        case 9:
+          if (task1Answers.exitIf === "Gig01") score++;
+          if (task1Answers.nextHop === "10002") score++;
+          break;
+        case 10:
+          if (task1Answers.allZeros === "matchesAny") score++;
+          if (task1Answers.gateway === "gatewayIP") score++;
+          break;
+        case 11:
+          if (task1Answers.summary === "1921680022") score++;
+          break;
+      }
+    } else if (taskNum === 2) {
+      switch (moduleIdx) {
+        case 0:
+          if (task2Answers.scenarioA === "Mesh") score++;
+          if (task2Answers.scenarioB === "Star") score++;
+          if (task2Answers.scenarioC === "Bus") score++;
+          break;
+        case 1:
+          if (task2Answers.p2p === "P2P") score++;
+          if (task2Answers.clientServer === "CS") score++;
+          break;
+        case 2:
+          if (task2Answers.step1 === "Data") score++;
+          if (task2Answers.step2 === "Segment") score++;
+          if (task2Answers.step3 === "Packet") score++;
+          if (task2Answers.step4 === "Frame") score++;
+          if (task2Answers.step5 === "Bits") score++;
+          break;
+        case 3:
+          const correctBits = [0, 1, 0, 0, 0, 0, 0, 0];
+          andingBits.forEach((b, i) => {
+            if (b === correctBits[i]) score++;
+          });
+          if (andingDecimal.trim() === "64") score++;
+          break;
+        case 4:
+          if (task2Answers.scenA === "CSMACD") score++;
+          if (task2Answers.scenB === "CSMACA") score++;
+          break;
+        case 5:
+          if (task2Answers.action1 === "Yes") score++;
+          if (task2Answers.action2 === "Yes") score++;
+          if (task2Answers.action3 === "No") score++;
+          break;
+        case 6:
+          if (task2Answers.hostname === "hostCmd") score++;
+          if (task2Answers.secret === "secCmd") score++;
+          if (task2Answers.save === "saveCmd") score++;
+          if (task2Answers.ping === "pingCmd") score++;
+          break;
+        case 7:
+          if (task2Answers.s1 === "1") score++;
+          if (task2Answers.s2 === "2") score++;
+          if (task2Answers.s3 === "3") score++;
+          if (task2Answers.s4 === "4") score++;
+          break;
+        case 8:
+          if (task2Answers.methodA === "Static") score++;
+          if (task2Answers.methodB === "Dynamic") score++;
+          break;
+        case 9:
+          if (task2Answers.prefix === "iproute") score++;
+          if (task2Answers.dest === "192.168.2.0") score++;
+          if (task2Answers.mask === "255.255.255.0") score++;
+          if (task2Answers.hop === "10.0.0.2") score++;
+          break;
+        case 10:
+          if (task2Answers.adChoice === "120") score++;
+          break;
+        case 11:
+          if (task2Answers.rootCause === "interfaceDown") score++;
+          break;
+      }
+    } else if (taskNum === 3) {
+      switch (moduleIdx) {
+        case 0:
+          if (task3Answers.netA === "LAN") score++;
+          if (task3Answers.netB === "WAN") score++;
+          if (task3Answers.netC === "WLAN") score++;
+          break;
+        case 3:
+          if (task3Answers.mask1 === "254") score++;
+          if (task3Answers.mask2 === "62") score++;
+          if (task3Answers.mask3 === "2") score++;
+          break;
+        case 6:
+          if (task3Answers.ip === "192.168.1.10") score++;
+          if (task3Answers.mask === "255.255.255.0") score++;
+          if (task3Answers.gateway === "192.168.1.1") score++;
+          break;
+        case 7:
+          if (task3Answers.kw === "bannermotd") score++;
+          if (task3Answers.delim === "hash") score++;
+          if (task3Answers.msg === "auth") score++;
+          break;
+        case 8:
+          if (task3Answers.rip === "hops") score++;
+          if (task3Answers.ospf === "cost") score++;
+          break;
+        case 11:
+          if (task3Answers.cmd === "ipv6route") score++;
+          if (task3Answers.dest === "ipv6prefix") score++;
+          if (task3Answers.hop === "ipv6hop") score++;
+          break;
+      }
+    }
+    return score;
+  };
+
+  // Fullscreen & Visibility Event Listeners
+  useEffect(() => {
+    if (!activityStarted || isCompletedFinal || isLocked) return;
+
+    const handleFullscreenChange = () => {
+      const isFs = !!(
+        document.fullscreenElement ||
+        (document as any).webkitFullscreenElement ||
+        (document as any).mozFullScreenElement ||
+        (document as any).msFullscreenElement
+      );
+      setIsFullscreenActive(isFs);
+
+      if (!isFs) {
+        setWarningsLeft(prev => {
+          const next = prev - 1;
+          if (next <= 0) {
+            handleCheatSubmit("Fullscreen exit limit reached");
+          }
+          return next;
+        });
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        setWarningsLeft(prev => {
+          const next = prev - 1;
+          if (next <= 0) {
+            handleCheatSubmit("Tab switch limit reached");
+          }
+          return next;
+        });
+      }
+    };
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    document.addEventListener("webkitfullscreenchange", handleFullscreenChange);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+      document.removeEventListener("webkitfullscreenchange", handleFullscreenChange);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [activityStarted, isCompletedFinal, isLocked]);
+
+  // Session Timer Decrement
+  useEffect(() => {
+    if (!activityStarted || isCompletedFinal || isLocked || !isFullscreenActive) return;
+
+    const timer = setInterval(() => {
+      setTimerLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          handleTimeOutSubmit();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [activityStarted, isCompletedFinal, isLocked, isFullscreenActive]);
 
   // Save scores helper
   const saveScore = async (taskKey: string, score: number) => {
@@ -157,7 +462,7 @@ function InteractiveSubnettingActivity({ onComplete, isCompleted, handleSelectNe
     current[taskKey] = score;
     localStorage.setItem(key, JSON.stringify(current));
 
-    // Save to server
+    // Save to database
     const email = localStorage.getItem("userEmail") || "";
     if (email) {
       try {
@@ -189,429 +494,1597 @@ function InteractiveSubnettingActivity({ onComplete, isCompleted, handleSelectNe
     }
   };
 
-  const handleSubmitVlsm = () => {
-    let score = 0;
-    if (vlsmPrefixes.Sales === "/25") score += 1;
-    if (vlsmNetworks.Sales === "192.168.10.0") score += 1;
-    if (vlsmPrefixes.IT === "/26") score += 1;
-    if (vlsmNetworks.IT === "192.168.10.128") score += 1;
-    if (vlsmPrefixes.HR === "/27") score += 1;
-    if (vlsmNetworks.HR === "192.168.10.192") score += 1;
-    if (vlsmPrefixes.WAN === "/30") score += 1;
-    if (vlsmNetworks.WAN === "192.168.10.224") score += 1;
-
-    setVlsmScore(score);
-    saveScore("vlsm", score);
+  const getTaskTitle = (taskNum: number) => {
+    const titles: Record<number, string[]> = {
+      0: ["Device Role Matching", "Topology Selection Scenario", "Network Types Identification"],
+      1: ["OSI vs TCP/IP Layer Mapping", "Network Model Classification", ""],
+      2: ["Network Protocols Matching", "Data Encapsulation Sequence", ""],
+      3: ["IP Address Class & Type", "Bitwise ANDing Operations", "Subnet Host Capacity"],
+      4: ["MAC Address Anatomy", "CSMA Mode Selection", ""],
+      5: ["ARP Resolution Flow", "Switch MAC Table Learning", ""],
+      6: ["Cisco IOS CLI Modes", "Essential Commands Matching", "Host IP Configuration Scenario"],
+      7: ["Router Memory Components", "Interface Configuration Sequence", "CLI Banner Setup Scenario"],
+      8: ["Routing Table Path Selection", "Routing Method Comparison", "RIP vs OSPF Metrics"],
+      9: ["Next-Hop IP vs Exit Interface", "Static Route Command Assembly", ""],
+      10: ["Default Static Route Anatomy", "Floating Static Route Scenario", ""],
+      11: ["Route Summarization Calculation", "Troubleshooting Static Routes", "IPv6 Static Route Assembly"]
+    };
+    return titles[moduleIdx]?.[taskNum - 1] || `Task ${taskNum}`;
   };
 
-  const handleSubmitAnding = () => {
-    let score = 0;
-    andingBits.forEach((b, idx) => {
-      if (b === correctAndingBits[idx]) score += 1;
-    });
-    if (andingDecimalResult.trim() === correctAndingDecimal) score += 1;
-
-    setAndingScore(score);
-    saveScore("anding", score);
+  const getTaskDescription = (taskNum: number) => {
+    const descriptions: Record<number, string[]> = {
+      0: [
+        "Connect each network hardware device to its core function or description.",
+        "Scenario: Choose the best topology (Mesh, Star, or Bus) based on the business requirements.",
+        "Scenario: Classify each networking environment description as LAN, WAN, or WLAN."
+      ],
+      1: [
+        "Map the OSI layers to their corresponding layer in the modern TCP/IP model.",
+        "Scenario: Read the descriptions and identify whether they describe a Peer-to-Peer (P2P) or Client-Server network model."
+      ],
+      2: [
+        "Match common Application layer protocols to their core function.",
+        "Scenario: Arrange the data encapsulation steps in order, from raw application data down to physical transmission bits."
+      ],
+      3: [
+        "Identify the address class (A, B, C) and address type (Public or Private) for the given IPv4 addresses.",
+        "Perform bitwise ANDing on the last octet for a packet destined to 192.168.1.75 with a mask of 255.255.255.192 (/26).",
+        "Calculate the total number of usable host IP addresses for each CIDR prefix."
+      ],
+      4: [
+        "Identify the parts of the MAC address: the OUI and the device NIC identifier.",
+        "Scenario: Select the appropriate media access control (CSMA) mechanism based on the physical media environment."
+      ],
+      5: [
+        "Sort the chronological steps of the Address Resolution Protocol (ARP) from cache check to data forwarding.",
+        "Scenario: A frame arrives at a blank switch. Predict how the MAC address table is populated and how the frame is forwarded."
+      ],
+      6: [
+        "Match the Cisco IOS CLI configuration prompt to its correct configuration mode.",
+        "Match standard Cisco IOS configuration commands to their purpose.",
+        "Scenario: Select the correct IP, Subnet Mask, and Gateway configurations to connect PC1 to the local network."
+      ],
+      7: [
+        "Match router hardware components (RAM, NVRAM, ROM, Flash) to the configurations or files they store.",
+        "Arrange the commands in sequence to enter configuration mode, select GigabitEthernet0/0, assign IP 192.168.1.1/24, and enable the port.",
+        "Scenario: Complete the Cisco CLI command input to set up an authorized access warning banner (MOTD)."
+      ],
+      8: [
+        "Scenario: Examine the routing table. A packet is destined to 10.1.1.45. Select the matching route the router will use to forward the packet.",
+        "Scenario: Select the best routing method (Static or Dynamic) based on the size and fault-tolerance needs of the network.",
+        "Identify the metric metrics used by Routing Information Protocol (RIP) and Open Shortest Path First (OSPF)."
+      ],
+      9: [
+        "Scenario: Examine the topology diagram description and identify R1's exit interface and next-hop IP to reach R2's LAN.",
+        "Assemble the full command syntax to configure a static route on R1 to reach R2's LAN 192.168.2.0/24 via next-hop 10.0.0.2."
+      ],
+      10: [
+        "Match the parameters in a default static route command to their function.",
+        "Scenario: Configure a backup floating static route that only becomes active if the primary OSPF route (AD=110) fails."
+      ],
+      11: [
+        "Calculate the summarized routing prefix for four contiguous Class C networks: 192.168.0.0/24 to 192.168.3.0/24.",
+        "Scenario: R1 has a static route to 192.168.2.0/24 via 10.0.0.2, but cannot ping PC2. Pinging next-hop 10.0.0.2 directly also fails. Diagnose the issue.",
+        "Assemble the correct IPv6 static route command prefix, destination prefix, and next-hop IPv6 address."
+      ]
+    };
+    return descriptions[moduleIdx]?.[taskNum - 1] || "";
   };
 
-  const handleSubmitIpv6 = () => {
+  const checkTaskCorrect = (taskNum: number): boolean => {
     let score = 0;
-    if (ipv6Prefix === "2001:0db8:acad") score += 1;
-    if (ipv6Subnet === "0001") score += 1;
-    if (ipv6Interface === "0000:0000:0000:0001") score += 1;
-
-    setIpv6Score(score);
-    saveScore("ipv6", score);
-  };
-
-  // Auto-complete course topic once all sub-tasks are submitted
-  useEffect(() => {
-    if (vlsmScore !== null && andingScore !== null && ipv6Score !== null) {
-      onComplete();
+    let max = 0;
+    
+    if (taskNum === 1) {
+      switch (moduleIdx) {
+        case 0:
+          max = 4;
+          if (task1Answers.Router === "RouterOption") score++;
+          if (task1Answers.Switch === "SwitchOption") score++;
+          if (task1Answers.Host === "HostOption") score++;
+          if (task1Answers.Firewall === "FirewallOption") score++;
+          break;
+        case 1:
+          max = 4;
+          if (task1Answers.OSIApp === "TCPApp") score++;
+          if (task1Answers.OSITrans === "TCPTrans") score++;
+          if (task1Answers.OSINet === "TCPInternet") score++;
+          if (task1Answers.OSIPhys === "TCPNetAccess") score++;
+          break;
+        case 2:
+          max = 4;
+          if (task1Answers.DNS === "DNSOption") score++;
+          if (task1Answers.HTTP === "HTTPOption") score++;
+          if (task1Answers.DHCP === "DHCPOption") score++;
+          if (task1Answers.SMTP === "SMTPOption") score++;
+          break;
+        case 3:
+          max = 4;
+          if (task1Answers.ip1 === "PrivateClassA") score++;
+          if (task1Answers.ip2 === "PrivateClassC") score++;
+          if (task1Answers.ip3 === "PublicClassA") score++;
+          if (task1Answers.ip4 === "PrivateClassB") score++;
+          break;
+        case 4:
+          max = 2;
+          if (task1Answers.oui === "OUI") score++;
+          if (task1Answers.nic === "NIC") score++;
+          break;
+        case 5:
+          max = 5;
+          if (task1Answers.step1 === "1") score++;
+          if (task1Answers.step2 === "2") score++;
+          if (task1Answers.step3 === "3") score++;
+          if (task1Answers.step4 === "4") score++;
+          if (task1Answers.step5 === "5") score++;
+          break;
+        case 6:
+          max = 4;
+          if (task1Answers.RouterUser === "UserEXEC") score++;
+          if (task1Answers.RouterPriv === "PrivEXEC") score++;
+          if (task1Answers.RouterGlobal === "GlobalConfig") score++;
+          if (task1Answers.RouterInterface === "InterfaceConfig") score++;
+          break;
+        case 7:
+          max = 4;
+          if (task1Answers.RAM === "RAMOption") score++;
+          if (task1Answers.NVRAM === "NVRAMOption") score++;
+          if (task1Answers.Flash === "FlashOption") score++;
+          if (task1Answers.ROM === "ROMOption") score++;
+          break;
+        case 8:
+          max = 1;
+          if (task1Answers.route === "route3") score++;
+          break;
+        case 9:
+          max = 2;
+          if (task1Answers.exitIf === "Gig01") score++;
+          if (task1Answers.nextHop === "10002") score++;
+          break;
+        case 10:
+          max = 2;
+          if (task1Answers.allZeros === "matchesAny") score++;
+          if (task1Answers.gateway === "gatewayIP") score++;
+          break;
+        case 11:
+          max = 1;
+          if (task1Answers.summary === "1921680022") score++;
+          break;
+      }
+      return score === max && max > 0;
+    } else if (taskNum === 2) {
+      switch (moduleIdx) {
+        case 0:
+          max = 3;
+          if (task2Answers.scenarioA === "Mesh") score++;
+          if (task2Answers.scenarioB === "Star") score++;
+          if (task2Answers.scenarioC === "Bus") score++;
+          break;
+        case 1:
+          max = 2;
+          if (task2Answers.p2p === "P2P") score++;
+          if (task2Answers.clientServer === "CS") score++;
+          break;
+        case 2:
+          max = 5;
+          if (task2Answers.step1 === "Data") score++;
+          if (task2Answers.step2 === "Segment") score++;
+          if (task2Answers.step3 === "Packet") score++;
+          if (task2Answers.step4 === "Frame") score++;
+          if (task2Answers.step5 === "Bits") score++;
+          break;
+        case 3:
+          max = 9;
+          const correctBits = [0, 1, 0, 0, 0, 0, 0, 0];
+          andingBits.forEach((b, i) => {
+            if (b === correctBits[i]) score++;
+          });
+          if (andingDecimal.trim() === "64") score++;
+          break;
+        case 4:
+          max = 2;
+          if (task2Answers.scenA === "CSMACD") score++;
+          if (task2Answers.scenB === "CSMACA") score++;
+          break;
+        case 5:
+          max = 3;
+          if (task2Answers.action1 === "Yes") score++;
+          if (task2Answers.action2 === "Yes") score++;
+          if (task2Answers.action3 === "No") score++;
+          break;
+        case 6:
+          max = 4;
+          if (task2Answers.hostname === "hostCmd") score++;
+          if (task2Answers.secret === "secCmd") score++;
+          if (task2Answers.save === "saveCmd") score++;
+          if (task2Answers.ping === "pingCmd") score++;
+          break;
+        case 7:
+          max = 4;
+          if (task2Answers.s1 === "1") score++;
+          if (task2Answers.s2 === "2") score++;
+          if (task2Answers.s3 === "3") score++;
+          if (task2Answers.s4 === "4") score++;
+          break;
+        case 8:
+          max = 2;
+          if (task2Answers.methodA === "Static") score++;
+          if (task2Answers.methodB === "Dynamic") score++;
+          break;
+        case 9:
+          max = 4;
+          if (task2Answers.prefix === "iproute") score++;
+          if (task2Answers.dest === "192.168.2.0") score++;
+          if (task2Answers.mask === "255.255.255.0") score++;
+          if (task2Answers.hop === "10.0.0.2") score++;
+          break;
+        case 10:
+          max = 1;
+          if (task2Answers.adChoice === "120") score++;
+          break;
+        case 11:
+          max = 1;
+          if (task2Answers.rootCause === "interfaceDown") score++;
+          break;
+      }
+      return score === max && max > 0;
+    } else if (taskNum === 3) {
+      switch (moduleIdx) {
+        case 0:
+          max = 3;
+          if (task3Answers.netA === "LAN") score++;
+          if (task3Answers.netB === "WAN") score++;
+          if (task3Answers.netC === "WLAN") score++;
+          break;
+        case 3:
+          max = 3;
+          if (task3Answers.mask1 === "254") score++;
+          if (task3Answers.mask2 === "62") score++;
+          if (task3Answers.mask3 === "2") score++;
+          break;
+        case 6:
+          max = 3;
+          if (task3Answers.ip === "192.168.1.10") score++;
+          if (task3Answers.mask === "255.255.255.0") score++;
+          if (task3Answers.gateway === "192.168.1.1") score++;
+          break;
+        case 7:
+          max = 3;
+          if (task3Answers.kw === "bannermotd") score++;
+          if (task3Answers.delim === "hash") score++;
+          if (task3Answers.msg === "auth") score++;
+          break;
+        case 8:
+          max = 2;
+          if (task3Answers.rip === "hops") score++;
+          if (task3Answers.ospf === "cost") score++;
+          break;
+        case 11:
+          max = 3;
+          if (task3Answers.cmd === "ipv6route") score++;
+          if (task3Answers.dest === "ipv6prefix") score++;
+          if (task3Answers.hop === "ipv6hop") score++;
+          break;
+      }
+      return score === max && max > 0;
     }
-  }, [vlsmScore, andingScore, ipv6Score]);
+    return false;
+  };
 
-  return (
-    <div className="flex-grow flex flex-col gap-6 select-none" onContextMenu={(e) => e.preventDefault()} onCopy={(e) => e.preventDefault()} onCut={(e) => e.preventDefault()}>
-      {/* Tabs */}
-      <div className="flex border-b border-brand-border/40">
-        <button
-          onClick={() => setActiveTab("vlsm")}
-          className={`px-4 py-3 text-xs font-bold transition-all border-b-2 cursor-pointer ${activeTab === "vlsm"
-            ? "border-brand-cyan text-brand-cyan"
-            : "border-transparent text-brand-muted hover:text-brand-text"
-            }`}
-        >
-          Task 1: VLSM Design {vlsmScore !== null ? `(${vlsmScore}/8) ✓` : ""}
-        </button>
-        <button
-          onClick={() => setActiveTab("anding")}
-          className={`px-4 py-3 text-xs font-bold transition-all border-b-2 cursor-pointer ${activeTab === "anding"
-            ? "border-brand-cyan text-brand-cyan"
-            : "border-transparent text-brand-muted hover:text-brand-text"
-            }`}
-        >
-          Task 2: Bitwise ANDing {andingScore !== null ? `(${andingScore}/9) ✓` : ""}
-        </button>
-        <button
-          onClick={() => setActiveTab("ipv6")}
-          className={`px-4 py-3 text-xs font-bold transition-all border-b-2 cursor-pointer ${activeTab === "ipv6"
-            ? "border-brand-cyan text-brand-cyan"
-            : "border-transparent text-brand-muted hover:text-brand-text"
-            }`}
-        >
-          Task 3: IPv6 Address Anatomy {ipv6Score !== null ? `(${ipv6Score}/3) ✓` : ""}
-        </button>
+  const handleSubmitTask = (taskNum: number) => {
+    let score = 0;
+    if (taskNum === 1) {
+      switch (moduleIdx) {
+        case 0:
+          if (task1Answers.Router === "RouterOption") score++;
+          if (task1Answers.Switch === "SwitchOption") score++;
+          if (task1Answers.Host === "HostOption") score++;
+          if (task1Answers.Firewall === "FirewallOption") score++;
+          break;
+        case 1:
+          if (task1Answers.OSIApp === "TCPApp") score++;
+          if (task1Answers.OSITrans === "TCPTrans") score++;
+          if (task1Answers.OSINet === "TCPInternet") score++;
+          if (task1Answers.OSIPhys === "TCPNetAccess") score++;
+          break;
+        case 2:
+          if (task1Answers.DNS === "DNSOption") score++;
+          if (task1Answers.HTTP === "HTTPOption") score++;
+          if (task1Answers.DHCP === "DHCPOption") score++;
+          if (task1Answers.SMTP === "SMTPOption") score++;
+          break;
+        case 3:
+          if (task1Answers.ip1 === "PrivateClassA") score++;
+          if (task1Answers.ip2 === "PrivateClassC") score++;
+          if (task1Answers.ip3 === "PublicClassA") score++;
+          if (task1Answers.ip4 === "PrivateClassB") score++;
+          break;
+        case 4:
+          if (task1Answers.oui === "OUI") score++;
+          if (task1Answers.nic === "NIC") score++;
+          break;
+        case 5:
+          if (task1Answers.step1 === "1") score++;
+          if (task1Answers.step2 === "2") score++;
+          if (task1Answers.step3 === "3") score++;
+          if (task1Answers.step4 === "4") score++;
+          if (task1Answers.step5 === "5") score++;
+          break;
+        case 6:
+          if (task1Answers.RouterUser === "UserEXEC") score++;
+          if (task1Answers.RouterPriv === "PrivEXEC") score++;
+          if (task1Answers.RouterGlobal === "GlobalConfig") score++;
+          if (task1Answers.RouterInterface === "InterfaceConfig") score++;
+          break;
+        case 7:
+          if (task1Answers.RAM === "RAMOption") score++;
+          if (task1Answers.NVRAM === "NVRAMOption") score++;
+          if (task1Answers.Flash === "FlashOption") score++;
+          if (task1Answers.ROM === "ROMOption") score++;
+          break;
+        case 8:
+          if (task1Answers.route === "route3") score++;
+          break;
+        case 9:
+          if (task1Answers.exitIf === "Gig01") score++;
+          if (task1Answers.nextHop === "10002") score++;
+          break;
+        case 10:
+          if (task1Answers.allZeros === "matchesAny") score++;
+          if (task1Answers.gateway === "gatewayIP") score++;
+          break;
+        case 11:
+          if (task1Answers.summary === "1921680022") score++;
+          break;
+      }
+      setTask1Score(score);
+      saveScore("task1", score);
+    } else if (taskNum === 2) {
+      switch (moduleIdx) {
+        case 0:
+          if (task2Answers.scenarioA === "Mesh") score++;
+          if (task2Answers.scenarioB === "Star") score++;
+          if (task2Answers.scenarioC === "Bus") score++;
+          break;
+        case 1:
+          if (task2Answers.p2p === "P2P") score++;
+          if (task2Answers.clientServer === "CS") score++;
+          break;
+        case 2:
+          if (task2Answers.step1 === "Data") score++;
+          if (task2Answers.step2 === "Segment") score++;
+          if (task2Answers.step3 === "Packet") score++;
+          if (task2Answers.step4 === "Frame") score++;
+          if (task2Answers.step5 === "Bits") score++;
+          break;
+        case 3:
+          const correctBits = [0, 1, 0, 0, 0, 0, 0, 0];
+          andingBits.forEach((b, i) => {
+            if (b === correctBits[i]) score++;
+          });
+          if (andingDecimal.trim() === "64") score++;
+          break;
+        case 4:
+          if (task2Answers.scenA === "CSMACD") score++;
+          if (task2Answers.scenB === "CSMACA") score++;
+          break;
+        case 5:
+          if (task2Answers.action1 === "Yes") score++;
+          if (task2Answers.action2 === "Yes") score++;
+          if (task2Answers.action3 === "No") score++;
+          break;
+        case 6:
+          if (task2Answers.hostname === "hostCmd") score++;
+          if (task2Answers.secret === "secCmd") score++;
+          if (task2Answers.save === "saveCmd") score++;
+          if (task2Answers.ping === "pingCmd") score++;
+          break;
+        case 7:
+          if (task2Answers.s1 === "1") score++;
+          if (task2Answers.s2 === "2") score++;
+          if (task2Answers.s3 === "3") score++;
+          if (task2Answers.s4 === "4") score++;
+          break;
+        case 8:
+          if (task2Answers.methodA === "Static") score++;
+          if (task2Answers.methodB === "Dynamic") score++;
+          break;
+        case 9:
+          if (task2Answers.prefix === "iproute") score++;
+          if (task2Answers.dest === "192.168.2.0") score++;
+          if (task2Answers.mask === "255.255.255.0") score++;
+          if (task2Answers.hop === "10.0.0.2") score++;
+          break;
+        case 10:
+          if (task2Answers.adChoice === "120") score++;
+          break;
+        case 11:
+          if (task2Answers.rootCause === "interfaceDown") score++;
+          break;
+      }
+      setTask2Score(score);
+      saveScore("task2", score);
+    } else if (taskNum === 3) {
+      switch (moduleIdx) {
+        case 0:
+          if (task3Answers.netA === "LAN") score++;
+          if (task3Answers.netB === "WAN") score++;
+          if (task3Answers.netC === "WLAN") score++;
+          break;
+        case 3:
+          if (task3Answers.mask1 === "254") score++;
+          if (task3Answers.mask2 === "62") score++;
+          if (task3Answers.mask3 === "2") score++;
+          break;
+        case 6:
+          if (task3Answers.ip === "192.168.1.10") score++;
+          if (task3Answers.mask === "255.255.255.0") score++;
+          if (task3Answers.gateway === "192.168.1.1") score++;
+          break;
+        case 7:
+          if (task3Answers.kw === "bannermotd") score++;
+          if (task3Answers.delim === "hash") score++;
+          if (task3Answers.msg === "auth") score++;
+          break;
+        case 8:
+          if (task3Answers.rip === "hops") score++;
+          if (task3Answers.ospf === "cost") score++;
+          break;
+        case 11:
+          if (task3Answers.cmd === "ipv6route") score++;
+          if (task3Answers.dest === "ipv6prefix") score++;
+          if (task3Answers.hop === "ipv6hop") score++;
+          break;
+      }
+      setTask3Score(score);
+      saveScore("task3", score);
+    }
+  };
+
+  const getTaskMaxScore = (taskNum: number): number => {
+    if (taskNum === 1) {
+      switch (moduleIdx) {
+        case 0: return 4;
+        case 1: return 4;
+        case 2: return 4;
+        case 3: return 4;
+        case 4: return 2;
+        case 5: return 5;
+        case 6: return 4;
+        case 7: return 4;
+        case 8: return 1;
+        case 9: return 2;
+        case 10: return 2;
+        case 11: return 1;
+        default: return 1;
+      }
+    } else if (taskNum === 2) {
+      switch (moduleIdx) {
+        case 0: return 3;
+        case 1: return 2;
+        case 2: return 5;
+        case 3: return 9;
+        case 4: return 2;
+        case 5: return 3;
+        case 6: return 4;
+        case 7: return 4;
+        case 8: return 2;
+        case 9: return 4;
+        case 10: return 1;
+        case 11: return 1;
+        default: return 1;
+      }
+    } else {
+      switch (moduleIdx) {
+        case 0: return 3;
+        case 3: return 3;
+        case 6: return 3;
+        case 7: return 3;
+        case 8: return 2;
+        case 11: return 3;
+        default: return 1;
+      }
+    }
+  };
+
+  const getModuleMaxScore = () => {
+    switch (moduleIdx) {
+      case 0: return 10;
+      case 1: return 6;
+      case 2: return 9;
+      case 3: return 16;
+      case 4: return 4;
+      case 5: return 8;
+      case 6: return 11;
+      case 7: return 11;
+      case 8: return 5;
+      case 9: return 6;
+      case 10: return 3;
+      case 11: return 5;
+      default: return 10;
+    }
+  };
+
+  const getModuleCurrentScore = () => {
+    const t1 = task1Score || 0;
+    const t2 = task2Score || 0;
+    const t3 = task3Score || 0;
+    return totalTasks === 2 ? (t1 + t2) : (t1 + t2 + t3);
+  };
+
+  // Helper to render multiple choice chips cleanly (replacing renderDropdown for 1-question tasks)
+  const renderOptionSelector = (
+    answers: Record<string, string>,
+    setAnswers: React.Dispatch<React.SetStateAction<Record<string, string>>>,
+    rowId: string,
+    options: { val: string; label: string }[]
+  ) => {
+    const currentValue = answers[rowId];
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 select-none">
+        {options.map(opt => {
+          const isSelected = currentValue === opt.val;
+          return (
+            <button
+              key={opt.val}
+              type="button"
+              disabled={isLocked}
+              onClick={() => {
+                if (isLocked) return;
+                setAnswers(prev => ({ ...prev, [rowId]: opt.val }));
+              }}
+              className={`p-4 rounded-xl border text-left text-xs font-semibold leading-relaxed transition-all cursor-pointer flex justify-between items-center ${
+                isSelected
+                  ? "bg-brand-cyan/15 border-brand-cyan text-brand-cyan shadow shadow-brand-cyan/10 animate-scaleIn"
+                  : "bg-brand-card/45 border-brand-border/40 text-brand-text hover:border-brand-cyan/40"
+              }`}
+            >
+              <span>{opt.label}</span>
+              {isSelected && (
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="text-brand-cyan shrink-0"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              )}
+            </button>
+          );
+        })}
       </div>
+    );
+  };
 
-      {/* Task 1: VLSM Address Planning */}
-      {activeTab === "vlsm" && (
-        <div className="flex flex-col gap-4">
-          <div className="bg-brand-bg/40 border border-brand-border/30 rounded-xl p-4">
-            <h3 className="font-bold text-sm text-brand-cyan mb-1">VLSM Design Exercise</h3>
-            <p className="text-xs text-brand-muted leading-relaxed">
-              Your company has been allocated the base network block <strong className="text-brand-text">192.168.10.0/24</strong>. You need to assign the appropriate CIDR prefix mask and Network Address to each department to satisfy their host requirements while minimizing wastage.
-              <br />
-              <strong className="text-brand-text">Golden Rule:</strong> Always assign addresses to the largest subnet requirements first, then work your way down!
-            </p>
-          </div>
+  // Helper to render inline configuration chips (PC properties / route builders)
+  const renderInlineChipSelector = (
+    answers: Record<string, string>,
+    setAnswers: React.Dispatch<React.SetStateAction<Record<string, string>>>,
+    key: string,
+    options: { val: string; label: string }[]
+  ) => {
+    const currentValue = answers[key];
+    return (
+      <div className="flex flex-wrap gap-2 mt-2 select-none">
+        {options.map(opt => {
+          const isSelected = currentValue === opt.val;
+          return (
+            <button
+              key={opt.val}
+              type="button"
+              disabled={isLocked}
+              onClick={() => {
+                if (isLocked) return;
+                setAnswers(prev => ({ ...prev, [key]: opt.val }));
+              }}
+              className={`px-3 py-1.5 text-[10px] font-mono font-bold rounded-lg border transition-all cursor-pointer ${
+                isSelected
+                  ? "bg-brand-cyan/20 border-brand-cyan text-brand-cyan shadow-sm"
+                  : "bg-brand-card/50 border-brand-border/40 text-brand-muted hover:border-brand-cyan/40"
+              }`}
+            >
+              {opt.label}
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Form */}
-            <div className="flex flex-col gap-3">
-              {["Sales", "IT", "HR", "WAN"].map((dept) => {
-                const reqs: Record<string, string> = {
-                  Sales: "120 hosts",
-                  IT: "50 hosts",
-                  HR: "25 hosts",
-                  WAN: "2 hosts",
-                };
+  // Helper to render drag-and-drop styled matching layout
+  const renderInteractiveMatch = (
+    answers: Record<string, string>,
+    setAnswers: React.Dispatch<React.SetStateAction<Record<string, string>>>,
+    rows: { id: string; label: string }[],
+    options: { val: string; label: string }[]
+  ) => {
+    const assignedVals = Object.values(answers);
+    const unassignedOptions = options.filter(opt => !assignedVals.includes(opt.val));
+
+    const handleSelectCard = (opt: { val: string; label: string }) => {
+      if (isLocked) return;
+      setActiveDeckCard(activeDeckCard?.val === opt.val ? null : opt);
+    };
+
+    const handleAssignSlot = (rowId: string) => {
+      if (isLocked) return;
+      if (activeDeckCard) {
+        setAnswers(prev => ({ ...prev, [rowId]: activeDeckCard.val }));
+        setActiveDeckCard(null);
+      } else {
+        if (answers[rowId]) {
+          setAnswers(prev => {
+            const copy = { ...prev };
+            delete copy[rowId];
+            return copy;
+          });
+        }
+      }
+    };
+
+    return (
+      <div className="flex flex-col gap-5 select-none">
+        <div className="bg-brand-bg/15 border border-brand-border/20 rounded-xl p-4">
+          <span className="text-[10px] text-brand-cyan font-bold uppercase tracking-wider block mb-3">Available Match Cards</span>
+          {unassignedOptions.length === 0 ? (
+            <div className="text-center text-xs text-brand-muted italic py-1">All cards matched! Submit your answer.</div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {unassignedOptions.map(opt => {
+                const isSelected = activeDeckCard?.val === opt.val;
                 return (
-                  <div key={dept} className="bg-brand-bg/20 border border-brand-border/30 rounded-xl p-4 flex flex-col gap-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs font-bold text-brand-text">{dept} Department</span>
-                      <span className="text-[10px] bg-brand-cyan/10 text-brand-cyan px-2 py-0.5 rounded font-bold font-mono">
-                        Requires {reqs[dept]}
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      {/* Prefix Select */}
-                      <div>
-                        <label className="text-[9px] uppercase tracking-wider text-brand-muted block mb-1 font-bold">Subnet Mask Prefix</label>
-                        <select
-                          value={vlsmPrefixes[dept]}
-                          onChange={(e) => setVlsmPrefixes(prev => ({ ...prev, [dept]: e.target.value }))}
-                          className="w-full bg-brand-card border border-brand-border/40 text-xs text-brand-text px-2 py-2.5 rounded-lg focus:outline-none focus:border-brand-cyan cursor-pointer"
-                        >
-                          <option value="">Select Prefix...</option>
-                          <option value="/25">/25 (128 addresses)</option>
-                          <option value="/26">/26 (64 addresses)</option>
-                          <option value="/27">/27 (32 addresses)</option>
-                          <option value="/30">/30 (4 addresses)</option>
-                        </select>
-                      </div>
-
-                      {/* Network Select */}
-                      <div>
-                        <label className="text-[9px] uppercase tracking-wider text-brand-muted block mb-1 font-bold">Network Address</label>
-                        <select
-                          value={vlsmNetworks[dept]}
-                          onChange={(e) => setVlsmNetworks(prev => ({ ...prev, [dept]: e.target.value }))}
-                          className="w-full bg-brand-card border border-brand-border/40 text-xs text-brand-text px-2 py-2.5 rounded-lg focus:outline-none focus:border-brand-cyan cursor-pointer"
-                        >
-                          <option value="">Select Address...</option>
-                          <option value="192.168.10.0">192.168.10.0</option>
-                          <option value="192.168.10.128">192.168.10.128</option>
-                          <option value="192.168.10.192">192.168.10.192</option>
-                          <option value="192.168.10.224">192.168.10.224</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
+                  <button
+                    key={opt.val}
+                    type="button"
+                    disabled={isLocked}
+                    onClick={() => handleSelectCard(opt)}
+                    className={`px-3 py-2 text-xs font-semibold rounded-xl border transition-all cursor-pointer ${
+                      isSelected
+                        ? "bg-brand-cyan/20 border-brand-cyan text-brand-cyan shadow shadow-brand-cyan/15 animate-pulse"
+                        : "bg-brand-card/50 border-brand-border/40 text-brand-text hover:border-brand-cyan/40"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
                 );
               })}
             </div>
+          )}
+        </div>
 
-            {/* Validation Panel */}
-            <div className="bg-brand-bg/15 border border-brand-border/20 rounded-xl p-5 flex flex-col gap-4">
-              <h4 className="font-bold text-xs uppercase tracking-wider text-brand-muted">Design Validation Checklist</h4>
-              <div className="flex flex-col gap-3">
-                {["Sales", "IT", "HR", "WAN"].map((dept) => {
-                  const prefixCorrect = vlsmPrefixes[dept] === vlsmCorrectPrefixes[dept];
-                  const networkCorrect = vlsmNetworks[dept] === vlsmCorrectNetworks[dept];
+        <div className="flex flex-col gap-3">
+          {rows.map(row => {
+            const assignedVal = answers[row.id];
+            const assignedOpt = options.find(o => o.val === assignedVal);
 
-                  return (
-                    <div key={dept} className="flex flex-col gap-1 border-b border-brand-border/10 pb-3 last:border-b-0 last:pb-0">
-                      <div className="flex justify-between items-center text-xs font-bold text-brand-text">
-                        <span>{dept} Department</span>
-                        {prefixCorrect && networkCorrect ? (
-                          <span className="text-green-400 font-bold">✓ Validated</span>
-                        ) : (
-                          <span className="text-brand-muted font-normal text-[10px]">Pending validation</span>
-                        )}
-                      </div>
-                      <div className="flex gap-4 text-[10px] mt-1">
-                        <span className={prefixCorrect ? "text-green-400" : "text-brand-muted"}>
-                          {prefixCorrect ? `Prefix: ${vlsmPrefixes[dept]} (Correct)` : "Prefix: Unmatched"}
-                        </span>
-                        <span className={networkCorrect ? "text-green-400" : "text-brand-muted"}>
-                          {networkCorrect ? `Network: ${vlsmNetworks[dept]} (Correct)` : "Network Address: Unmatched"}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
+            return (
+              <div key={row.id} className="bg-brand-bg/25 border border-brand-border/30 rounded-xl p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <span className="text-xs text-brand-text font-medium leading-relaxed max-w-lg">{row.label}</span>
+                <button
+                  type="button"
+                  disabled={isLocked}
+                  onClick={() => handleAssignSlot(row.id)}
+                  className={`w-full md:w-56 h-10 px-3 flex items-center justify-between border-2 rounded-xl text-xs transition-all cursor-pointer ${
+                    assignedOpt
+                      ? "bg-brand-cyan/10 border-brand-cyan text-brand-cyan font-bold"
+                      : activeDeckCard
+                      ? "bg-brand-card/30 border-dashed border-brand-cyan/40 text-brand-muted hover:border-brand-cyan/60"
+                      : "bg-brand-card/20 border-dashed border-brand-border/50 text-brand-muted hover:border-brand-border"
+                  }`}
+                >
+                  <span className="truncate">{assignedOpt ? assignedOpt.label : "Click to place active card..."}</span>
+                  {assignedOpt && (
+                    <span className="text-brand-muted text-[10px] hover:text-brand-text ml-2 shrink-0">✕</span>
+                  )}
+                </button>
               </div>
-              {isVlsmCorrect ? (
-                <div className="mt-auto bg-green-500/10 border border-green-500/20 text-green-400 p-4 rounded-xl text-center text-xs font-bold">
-                  🎉 Task 1 Configurations Valid! Click Submit below to record your grade.
-                </div>
-              ) : (
-                <div className="mt-auto bg-brand-bg/50 border border-brand-border/40 text-brand-muted p-4 rounded-xl text-center text-xs">
-                  Match the prefix sizes and network boundaries correctly based on the VLSM Golden Rule.
-                </div>
-              )}
-              <button
-                onClick={handleSubmitVlsm}
-                disabled={Object.values(vlsmPrefixes).some(v => !v) || Object.values(vlsmNetworks).some(v => !v)}
-                className="w-full mt-3 px-5 py-2.5 bg-brand-cyan hover:bg-brand-cyan-hover disabled:opacity-50 disabled:cursor-not-allowed text-brand-bg text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-md shrink-0"
-              >
-                {vlsmScore !== null ? "Resubmit Task 1" : "Submit Task 1"}
-              </button>
-              {vlsmScore !== null && (
-                <div className="bg-brand-cyan/15 border border-brand-cyan/25 px-4 py-2.5 rounded-xl flex items-center justify-between mt-2 animate-scaleIn">
-                  <div className="text-[10px] text-brand-cyan uppercase tracking-wider font-bold">Recorded Score</div>
-                  <div className="text-sm font-mono font-extrabold text-brand-cyan">{vlsmScore} / 8</div>
-                </div>
-              )}
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  const renderTask1Content = () => {
+    switch (moduleIdx) {
+      case 0: // Device Role Matching
+        return renderInteractiveMatch(
+          task1Answers,
+          setTask1Answers,
+          [
+            { id: "Router", label: "Connects different network segments and routes traffic between them." },
+            { id: "Switch", label: "Forwards data frames within a local area network (LAN)." },
+            { id: "Host", label: "Sends/receives endpoint traffic (e.g., PC, server, phone)." },
+            { id: "Firewall", label: "Monitors and filters network traffic based on security rules." }
+          ],
+          [
+            { val: "RouterOption", label: "Router" },
+            { val: "SwitchOption", label: "Switch" },
+            { val: "HostOption", label: "Host" },
+            { val: "FirewallOption", label: "Firewall" }
+          ]
+        );
+
+      case 1: // OSI to TCP/IP Layer Matching
+        return renderInteractiveMatch(
+          task1Answers,
+          setTask1Answers,
+          [
+            { id: "OSIApp", label: "OSI Application / Presentation / Session" },
+            { id: "OSITrans", label: "OSI Transport" },
+            { id: "OSINet", label: "OSI Network" },
+            { id: "OSIPhys", label: "OSI Data Link / Physical" }
+          ],
+          [
+            { val: "TCPApp", label: "Application Layer" },
+            { val: "TCPTrans", label: "Transport Layer" },
+            { val: "TCPInternet", label: "Internet Layer" },
+            { val: "TCPNetAccess", label: "Network Access Layer" }
+          ]
+        );
+
+      case 2: // Protocols Match
+        return renderInteractiveMatch(
+          task1Answers,
+          setTask1Answers,
+          [
+            { id: "DNS", label: "Resolves human-readable domain names to IP addresses." },
+            { id: "HTTP", label: "Transfers webpages and media assets across the Web." },
+            { id: "DHCP", label: "Dynamically assigns IP configuration to host devices." },
+            { id: "SMTP", label: "Transfers electronic mail messages between mail servers." }
+          ],
+          [
+            { val: "DNSOption", label: "DNS" },
+            { val: "HTTPOption", label: "HTTP" },
+            { val: "DHCPOption", label: "DHCP" },
+            { val: "SMTPOption", label: "SMTP" }
+          ]
+        );
+
+      case 3: // IP Class & Type
+        return renderInteractiveMatch(
+          task1Answers,
+          setTask1Answers,
+          [
+            { id: "ip1", label: "10.0.0.50" },
+            { id: "ip2", label: "192.168.1.100" },
+            { id: "ip3", label: "8.8.8.8" },
+            { id: "ip4", label: "172.16.5.20" }
+          ],
+          [
+            { val: "PrivateClassA", label: "Private / Class A" },
+            { val: "PrivateClassB", label: "Private / Class B" },
+            { val: "PrivateClassC", label: "Private / Class C" },
+            { val: "PublicClassA", label: "Public / Class A" }
+          ]
+        );
+
+      case 4: // MAC Anatomy
+        return (
+          <div className="flex flex-col gap-4">
+            <div className="bg-brand-bg/15 border border-brand-border/20 rounded-xl p-4 flex items-center justify-center font-mono font-bold text-sm text-center mb-2">
+              <span className="bg-brand-cyan/15 border border-brand-cyan/30 text-brand-cyan px-2.5 py-1.5 rounded-lg">00:60:2F</span>
+              <span className="mx-2">:</span>
+              <span className="bg-brand-border/20 border border-brand-border text-brand-text/90 px-2.5 py-1.5 rounded-lg">3A:07:BC</span>
+            </div>
+            {renderInteractiveMatch(
+              task1Answers,
+              setTask1Answers,
+              [
+                { id: "oui", label: "First 3 Octets (00:60:2F)" },
+                { id: "nic", label: "Last 3 Octets (3A:07:BC)" }
+              ],
+              [
+                { val: "OUI", label: "OUI (Organizationally Unique Identifier)" },
+                { val: "NIC", label: "NIC-Specific Identifier" }
+              ]
+            )}
+          </div>
+        );
+
+      case 5: // ARP Flow
+        return renderInteractiveMatch(
+          task1Answers,
+          setTask1Answers,
+          [
+            { id: "step1", label: "Host searches its local ARP cache for the destination IP." },
+            { id: "step2", label: "Cache miss: Host broadcasts an ARP request frame on the LAN." },
+            { id: "step3", label: "All devices receive the frame; non-matching devices discard it." },
+            { id: "step4", label: "Destination device sends a unicast ARP reply containing its MAC." },
+            { id: "step5", label: "Sender caches the MAC address and sends the queued IP packet." }
+          ],
+          [
+            { val: "1", label: "Step 1" },
+            { val: "2", label: "Step 2" },
+            { val: "3", label: "Step 3" },
+            { val: "4", label: "Step 4" },
+            { val: "5", label: "Step 5" }
+          ]
+        );
+
+      case 6: // Cisco IOS CLI Modes
+        return renderInteractiveMatch(
+          task1Answers,
+          setTask1Answers,
+          [
+            { id: "RouterUser", label: "Router>" },
+            { id: "RouterPriv", label: "Router#" },
+            { id: "RouterGlobal", label: "Router(config)#" },
+            { id: "RouterInterface", label: "Router(config-if)#" }
+          ],
+          [
+            { val: "UserEXEC", label: "User EXEC Mode" },
+            { val: "PrivEXEC", label: "Privileged EXEC Mode" },
+            { val: "GlobalConfig", label: "Global Configuration Mode" },
+            { val: "InterfaceConfig", label: "Interface Configuration Mode" }
+          ]
+        );
+
+      case 7: // Router Memory
+        return renderInteractiveMatch(
+          task1Answers,
+          setTask1Answers,
+          [
+            { id: "RAM", label: "Stores the currently running configuration file (running-config)." },
+            { id: "NVRAM", label: "Stores the startup configuration file (startup-config)." },
+            { id: "Flash", label: "Stores the Cisco IOS operating system software image." },
+            { id: "ROM", label: "Stores diagnostics, power-on self-test (POST), and boot code." }
+          ],
+          [
+            { val: "RAMOption", label: "RAM (Volatile)" },
+            { val: "NVRAMOption", label: "NVRAM (Non-Volatile)" },
+            { val: "FlashOption", label: "Flash Memory" },
+            { val: "ROMOption", label: "ROM (Read-Only)" }
+          ]
+        );
+
+      case 8: // Path Selection / Longest Prefix Match
+        return renderOptionSelector(task1Answers, setTask1Answers, "route", [
+          { val: "route1", label: "10.0.0.0/8 via 192.168.1.2" },
+          { val: "route2", label: "10.1.1.0/24 via 192.168.2.2" },
+          { val: "route3", label: "10.1.1.32/28 via 192.168.3.2" }
+        ]);
+
+      case 9: // Next-Hop vs Exit Interface
+        return (
+          <div className="flex flex-col gap-4">
+            <p className="text-xs text-brand-muted italic leading-normal mb-2">
+              Topology Scenario: Router R1 (LAN: 192.168.1.0/24, IP: 192.168.1.1) connects to Router R2 (LAN: 192.168.2.0/24, IP: 192.168.2.1).
+              The serial/WAN link between them is 10.0.0.0/30. R1's exit interface is GigabitEthernet0/1 (IP: 10.0.0.1) and R2's interface is GigabitEthernet0/1 (IP: 10.0.0.2).
+            </p>
+            <div className="flex flex-col gap-4">
+              <div>
+                <span className="text-xs text-brand-text font-bold block mb-2">R1's Local Exit Interface</span>
+                {renderOptionSelector(task1Answers, setTask1Answers, "exitIf", [
+                  { val: "Gig00", label: "GigabitEthernet0/0" },
+                  { val: "Gig01", label: "GigabitEthernet0/1" }
+                ])}
+              </div>
+              <div className="mt-2">
+                <span className="text-xs text-brand-text font-bold block mb-2">R1's Next-Hop IP Address</span>
+                {renderOptionSelector(task1Answers, setTask1Answers, "nextHop", [
+                  { val: "10001", label: "10.0.0.1" },
+                  { val: "10002", label: "10.0.0.2" },
+                  { val: "19216821", label: "192.168.2.1" }
+                ])}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
 
-      {/* Task 2: Bitwise ANDing */}
-      {activeTab === "anding" && (
-        <div className="flex flex-col gap-4">
-          <div className="bg-brand-bg/40 border border-brand-border/30 rounded-xl p-4">
-            <h3 className="font-bold text-sm text-brand-cyan mb-1">Bitwise ANDing Operations</h3>
-            <p className="text-xs text-brand-muted leading-relaxed">
-              When a router processes a packet, it extracts the Network ID using bitwise ANDing.
-              <br />
-              <strong>Exercise:</strong> Perform the AND operation on the last octet for a packet destined to <strong className="text-brand-text">192.168.1.75</strong> with a mask of <strong className="text-brand-text">255.255.255.192 (/26)</strong>.
-              <br />
-              Toggle the bits in the output row to calculate the result of the bitwise AND, and enter the final Network ID in decimal.
-            </p>
+      case 10: // Default Route Anatomy
+        return (
+          <div className="flex flex-col gap-4">
+            <div className="bg-brand-bg/15 border border-brand-border/20 rounded-xl p-4 text-center font-mono font-bold text-xs mb-2">
+              R1(config)# <span className="text-brand-text">ip route </span>
+              <span className="text-brand-cyan">0.0.0.0 0.0.0.0 </span>
+              <span className="text-brand-text">203.0.113.1</span>
+            </div>
+            {renderInteractiveMatch(
+              task1Answers,
+              setTask1Answers,
+              [
+                { id: "allZeros", label: "Syntax: 0.0.0.0 0.0.0.0" },
+                { id: "gateway", label: "Syntax: 203.0.113.1" }
+              ],
+              [
+                { val: "matchesAny", label: "Matches any destination network address" },
+                { val: "gatewayIP", label: "Specifies next-hop IP (gateway)" }
+              ]
+            )}
           </div>
+        );
 
+      case 11: // Route Summarization
+        return renderOptionSelector(task1Answers, setTask1Answers, "summary", [
+          { val: "1921680023", label: "192.168.0.0/23" },
+          { val: "1921680022", label: "192.168.0.0/22" },
+          { val: "1921680021", label: "192.168.0.0/21" }
+        ]);
+
+      default:
+        return null;
+    }
+  };
+
+  const renderTask2Content = () => {
+    switch (moduleIdx) {
+      case 0: // Topology Selection Scenario
+        return renderInteractiveMatch(
+          task2Answers,
+          setTask2Answers,
+          [
+            { id: "scenarioA", label: "Scenario A: Critical datacenter requiring fault tolerance and backup connections between all routers." },
+            { id: "scenarioB", label: "Scenario B: Small office LAN connecting all workstations to a central networking switch." },
+            { id: "scenarioC", label: "Scenario C: Simple linear network layouts linking device-to-device with a primary backbone cable." }
+          ],
+          [
+            { val: "Mesh", label: "Mesh Topology" },
+            { val: "Star", label: "Star Topology" },
+            { val: "Bus", label: "Bus Topology" }
+          ]
+        );
+
+      case 1: // P2P vs Client-Server
+        return renderInteractiveMatch(
+          task2Answers,
+          setTask2Answers,
+          [
+            { id: "p2p", label: "Scenario A: Two coworkers transferring design files directly between their laptops using a crossover Ethernet cable." },
+            { id: "clientServer", label: "Scenario B: Hundreds of branch employees accessing customer data files from a central database host server." }
+          ],
+          [
+            { val: "P2P", label: "Peer-to-Peer Model" },
+            { val: "CS", label: "Client-Server Model" }
+          ]
+        );
+
+      case 2: // Encapsulation Order
+        return renderInteractiveMatch(
+          task2Answers,
+          setTask2Answers,
+          [
+            { id: "step1", label: "Slot 1 (Application Layer)" },
+            { id: "step2", label: "Slot 2 (Transport Layer / Ports)" },
+            { id: "step3", label: "Slot 3 (Network Layer / IPs)" },
+            { id: "step4", label: "Slot 4 (Data Link Layer / MACs)" },
+            { id: "step5", label: "Slot 5 (Physical Layer / Medium)" }
+          ],
+          [
+            { val: "Data", label: "Data" },
+            { val: "Segment", label: "Segment" },
+            { val: "Packet", label: "Packet" },
+            { val: "Frame", label: "Frame" },
+            { val: "Bits", label: "Bits" }
+          ]
+        );
+
+      case 3: // Bitwise ANDing Exercise
+        return (
           <div className="bg-brand-bg/20 border border-brand-border/30 rounded-xl p-5 flex flex-col gap-6">
             <div className="grid grid-cols-10 items-center gap-2 font-mono text-center text-xs md:text-sm">
-              {/* Header */}
               <div className="col-span-2 text-left font-sans font-bold text-brand-muted text-xs">Octet Rows</div>
               {[128, 64, 32, 16, 8, 4, 2, 1].map(v => (
                 <div key={v} className="text-[10px] text-brand-muted font-bold">{v}</div>
               ))}
 
-              {/* Row 1: Destination IP octet 75 */}
               <div className="col-span-2 text-left font-sans font-bold text-brand-text">IP (75)</div>
               {[0, 1, 0, 0, 1, 0, 1, 1].map((b, idx) => (
                 <div key={idx} className="bg-brand-bg border border-brand-border/40 p-2 rounded-lg text-brand-text/80">{b}</div>
               ))}
 
-              {/* Row 2: Subnet Mask octet 192 */}
               <div className="col-span-2 text-left font-sans font-bold text-brand-text">Mask (192)</div>
               {[1, 1, 0, 0, 0, 0, 0, 0].map((b, idx) => (
                 <div key={idx} className="bg-brand-bg border border-brand-border/40 p-2 rounded-lg text-brand-text/80">{b}</div>
               ))}
 
-              {/* Operator */}
               <div className="col-span-10 border-t border-dashed border-brand-border/40 my-1"></div>
 
-              {/* Row 3: Output AND (Interactive) */}
               <div className="col-span-2 text-left font-sans font-bold text-brand-cyan flex items-center gap-1">
                 <span>Result (AND)</span>
               </div>
-              {andingBits.map((b, idx) => {
-                return (
-                  <button
-                    key={idx}
-                    onClick={() => toggleAndingBit(idx)}
-                    className={`p-2.5 rounded-lg border font-mono font-bold text-sm cursor-pointer transition-all ${b === 1
-                      ? "bg-brand-cyan/20 border-brand-cyan text-brand-cyan shadow-sm"
-                      : "bg-brand-card border-brand-border/40 text-brand-muted hover:border-brand-border"
-                      }`}
-                  >
-                    {b}
-                  </button>
-                );
-              })}
+              {andingBits.map((b, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => toggleAndingBit(idx)}
+                  className={`p-2.5 rounded-lg border font-mono font-bold text-sm cursor-pointer transition-all ${b === 1
+                    ? "bg-brand-cyan/20 border-brand-cyan text-brand-cyan shadow-sm"
+                    : "bg-brand-card border-brand-border/40 text-brand-muted hover:border-brand-border"
+                    }`}
+                >
+                  {b}
+                </button>
+              ))}
             </div>
 
-            {/* Decimal Input */}
             <div className="flex flex-col sm:flex-row items-center gap-4 border-t border-brand-border/20 pt-6 mt-2">
               <div className="flex-grow">
-                <label className="text-xs font-bold text-brand-text block mb-1">Resulting Network ID Address</label>
-                <p className="text-[10px] text-brand-muted">
-                  Type the X value for the Network ID `192.168.1.X`, where X is the decimal conversion of your AND bits.
-                </p>
+                <span className="text-xs font-bold text-brand-text block mb-1">Resulting Network ID Address</span>
+                <span className="text-[10px] text-brand-muted block">
+                  Type the X value for the Network ID `192.168.10.X`, where X is the decimal conversion of your AND bits.
+                </span>
               </div>
-
               <div className="flex gap-2 items-center">
-                <span className="font-mono text-sm text-brand-text select-none">192.168.1.</span>
+                <span className="font-mono text-sm text-brand-text">192.168.10.</span>
                 <input
                   type="text"
-                  value={andingDecimalResult}
-                  onChange={(e) => setAndingDecimalResult(e.target.value)}
+                  value={andingDecimal}
+                  onChange={(e) => setAndingDecimal(e.target.value)}
                   placeholder="X"
                   className="w-20 bg-brand-card border border-brand-border/40 focus:border-brand-cyan focus:outline-none rounded-lg px-3 py-2 text-center text-sm font-mono text-brand-cyan font-bold"
                 />
               </div>
             </div>
-
-            {isAndingCorrect ? (
-              <div className="bg-green-500/10 border border-green-500/20 text-green-400 p-4 rounded-xl text-center text-xs font-bold mt-2">
-                🎉 Correct configuration! Click Submit below to record your grade.
-              </div>
-            ) : (
-              <div className="bg-brand-bg/30 border border-brand-border/30 text-brand-muted p-4 rounded-xl text-center text-xs mt-2">
-                Perform AND on each vertical pair: 1 AND 1 = 1, any other combination = 0. Then calculate the decimal sum of the output bits.
-              </div>
-            )}
-            <button
-              onClick={handleSubmitAnding}
-              disabled={!andingDecimalResult.trim()}
-              className="w-full mt-4 px-5 py-2.5 bg-brand-cyan hover:bg-brand-cyan-hover disabled:opacity-50 disabled:cursor-not-allowed text-brand-bg text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-md shrink-0"
-            >
-              {andingScore !== null ? "Resubmit Task 2" : "Submit Task 2"}
-            </button>
-            {andingScore !== null && (
-              <div className="bg-brand-cyan/15 border border-brand-cyan/25 px-4 py-2.5 rounded-xl flex items-center justify-between mt-2 animate-scaleIn">
-                <div className="text-[10px] text-brand-cyan uppercase tracking-wider font-bold">Recorded Score</div>
-                <div className="text-sm font-mono font-extrabold text-brand-cyan">{andingScore} / 9</div>
-              </div>
-            )}
           </div>
-        </div>
-      )}
+        );
 
-      {/* Task 3: IPv6 Address Anatomy */}
-      {activeTab === "ipv6" && (
-        <div className="flex flex-col gap-4">
-          <div className="bg-brand-bg/40 border border-brand-border/30 rounded-xl p-4">
-            <h3 className="font-bold text-sm text-brand-cyan mb-1">IPv6 Address Structure Matching</h3>
-            <p className="text-xs text-brand-muted leading-relaxed">
-              IPv6 uses 128-bit addresses standardizing on a /64 local subnet boundary.
-              <br />
-              <strong>Exercise:</strong> Map each segment of the address <strong className="text-brand-text">2001:0db8:acad : 0001 : 0000:0000:0000:0001</strong> to its correct architectural label.
+      case 4: // CSMA Mode Selection
+        return renderInteractiveMatch(
+          task2Answers,
+          setTask2Answers,
+          [
+            { id: "scenA", label: "Scenario A: Half-duplex wired Ethernet connections connected through a legacy hub." },
+            { id: "scenB", label: "Scenario B: Shared wireless network channel (802.11 Wi-Fi) with multiple devices." }
+          ],
+          [
+            { val: "CSMACD", label: "CSMA/CD (Collision Detection)" },
+            { val: "CSMACA", label: "CSMA/CA (Collision Avoidance)" }
+          ]
+        );
+
+      case 5: // Switch MAC learning Scenario
+        return (
+          <div className="flex flex-col gap-4">
+            <p className="text-xs text-brand-muted leading-normal italic mb-2">
+              Scenario: An Ethernet frame arrives at Port 1 of a switch. The source MAC is A, and destination MAC is B.
+              The switch's MAC address table is currently blank. Indicate which actions are performed by the switch.
             </p>
+            <div className="flex flex-col gap-5">
+              {[
+                { id: "action1", text: "Action 1: Switch records MAC A mapped to Port 1 in its MAC address table." },
+                { id: "action2", text: "Action 2: Switch floods the frame out all ports except the incoming Port 1." },
+                { id: "action3", text: "Action 3: Switch unicasts the frame directly out Port 2." }
+              ].map((row) => (
+                <div key={row.id} className="bg-brand-bg/20 border border-brand-border/30 rounded-xl p-4 flex flex-col gap-2">
+                  <span className="text-xs text-brand-text font-medium">{row.text}</span>
+                  {renderOptionSelector(task2Answers, setTask2Answers, row.id, [
+                    { val: "Yes", label: "Yes, performed" },
+                    { val: "No", label: "No, not performed" }
+                  ])}
+                </div>
+              ))}
+            </div>
           </div>
+        );
 
+      case 6: // Command Matching
+        return renderInteractiveMatch(
+          task2Answers,
+          setTask2Answers,
+          [
+            { id: "hostname", label: "Configures a unique text name identifier for the network device." },
+            { id: "secret", label: "Enables password encryption for access into Privileged EXEC mode." },
+            { id: "save", label: "Saves active configuration variables from RAM to startup config NVRAM." },
+            { id: "ping", label: "Sends ICMP echo request packets to verify network connectivity." }
+          ],
+          [
+            { val: "hostCmd", label: "hostname" },
+            { val: "secCmd", label: "enable secret" },
+            { val: "saveCmd", label: "copy running-config startup-config" },
+            { val: "pingCmd", label: "ping" }
+          ]
+        );
+
+      case 7: // Interface config sequence
+        return renderInteractiveMatch(
+          task2Answers,
+          setTask2Answers,
+          [
+            { id: "s1", label: "Step 1" },
+            { id: "s2", label: "Step 2" },
+            { id: "s3", label: "Step 3" },
+            { id: "s4", label: "Step 4" }
+          ],
+          [
+            { val: "1", label: "Router(config)# configure terminal" },
+            { val: "2", label: "Router(config)# interface gigabitethernet 0/0" },
+            { val: "3", label: "Router(config-if)# ip address 192.168.1.1 255.255.255.0" },
+            { val: "4", label: "Router(config-if)# no shutdown" }
+          ]
+        );
+
+      case 8: // Routing Method comparison
+        return renderInteractiveMatch(
+          task2Answers,
+          setTask2Answers,
+          [
+            { id: "methodA", label: "Scenario A: A simple hub-and-spoke network with only 2 remote office routers connecting back to HQ." },
+            { id: "methodB", label: "Scenario B: A massive ISP core network that needs automated routing metric updates to bypass link failures." }
+          ],
+          [
+            { val: "Static", label: "Static Routing" },
+            { val: "Dynamic", label: "Dynamic Routing" }
+          ]
+        );
+
+      case 9: // Command Syntax Assembly
+        const prefixVal = task2Answers.prefix || "_______";
+        const destVal = task2Answers.dest || "___________";
+        const maskVal = task2Answers.mask || "_______________";
+        const hopVal = task2Answers.hop || "__________";
+        return (
           <div className="bg-brand-bg/20 border border-brand-border/30 rounded-xl p-5 flex flex-col gap-6">
-            <div className="flex flex-col gap-4 items-center">
-              {/* Address segments visual display */}
-              <div className="flex flex-wrap gap-2 text-xs md:text-sm font-mono font-bold text-center">
-                <div className={`px-3 py-2 rounded-lg border ${ipv6Prefix === "2001:0db8:acad" ? "bg-brand-cyan/15 border-brand-cyan text-brand-cyan" : "bg-brand-card border-brand-border/40 text-brand-text"}`}>
-                  2001:0db8:acad
-                </div>
-                <span className="self-center text-brand-muted font-sans">:</span>
-                <div className={`px-3 py-2 rounded-lg border ${ipv6Subnet === "0001" ? "bg-brand-cyan/15 border-brand-cyan text-brand-cyan" : "bg-brand-card border-brand-border/40 text-brand-text"}`}>
-                  0001
-                </div>
-                <span className="self-center text-brand-muted font-sans">:</span>
-                <div className={`px-3 py-2 rounded-lg border ${ipv6Interface === "0000:0000:0000:0001" ? "bg-brand-cyan/15 border-brand-cyan text-brand-cyan" : "bg-brand-card border-brand-border/40 text-brand-text"}`}>
-                  0000:0000:0000:0001
-                </div>
+            <div className="bg-brand-bg/15 border border-brand-border/20 rounded-xl p-4 font-mono text-xs leading-relaxed text-center">
+              Router(config)# <span className="text-brand-cyan font-bold">{prefixVal} {destVal} {maskVal} {hopVal}</span>
+            </div>
+            <div className="flex flex-col gap-4">
+              <div>
+                <span className="text-[10px] text-brand-muted font-bold uppercase tracking-wider block mb-1">Command Prefix</span>
+                {renderInlineChipSelector(task2Answers, setTask2Answers, "prefix", [
+                  { val: "iproute", label: "ip route" },
+                  { val: "route", label: "route" }
+                ])}
               </div>
-
-              {/* Mappers */}
-              <div className="w-full grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-                {/* Prefix Mapper */}
-                <div className="bg-brand-bg/40 border border-brand-border/40 p-4 rounded-xl flex flex-col gap-2">
-                  <span className="text-[10px] text-brand-cyan uppercase tracking-wider font-bold">Global Routing Prefix</span>
-                  <select
-                    value={ipv6Prefix}
-                    onChange={(e) => setIpv6Prefix(e.target.value)}
-                    className="w-full bg-brand-card border border-brand-border/40 text-xs text-brand-text px-2 py-2 rounded-lg focus:outline-none focus:border-brand-cyan cursor-pointer"
-                  >
-                    <option value="">Select Segment...</option>
-                    <option value="2001:0db8:acad">2001:0db8:acad</option>
-                    <option value="0001">0001</option>
-                    <option value="0000:0000:0000:0001">0000:0000:0000:0001</option>
-                  </select>
-                </div>
-
-                {/* Subnet ID Mapper */}
-                <div className="bg-brand-bg/40 border border-brand-border/40 p-4 rounded-xl flex flex-col gap-2">
-                  <span className="text-[10px] text-brand-cyan uppercase tracking-wider font-bold">Subnet ID (16 bits)</span>
-                  <select
-                    value={ipv6Subnet}
-                    onChange={(e) => setIpv6Subnet(e.target.value)}
-                    className="w-full bg-brand-card border border-brand-border/40 text-xs text-brand-text px-2 py-2 rounded-lg focus:outline-none focus:border-brand-cyan cursor-pointer"
-                  >
-                    <option value="">Select Segment...</option>
-                    <option value="2001:0db8:acad">2001:0db8:acad</option>
-                    <option value="0001">0001</option>
-                    <option value="0000:0000:0000:0001">0000:0000:0000:0001</option>
-                  </select>
-                </div>
-
-                {/* Interface ID Mapper */}
-                <div className="bg-brand-bg/40 border border-brand-border/40 p-4 rounded-xl flex flex-col gap-2">
-                  <span className="text-[10px] text-brand-cyan uppercase tracking-wider font-bold">Interface ID (64 bits)</span>
-                  <select
-                    value={ipv6Interface}
-                    onChange={(e) => setIpv6Interface(e.target.value)}
-                    className="w-full bg-brand-card border border-brand-border/40 text-xs text-brand-text px-2 py-2 rounded-lg focus:outline-none focus:border-brand-cyan cursor-pointer"
-                  >
-                    <option value="">Select Segment...</option>
-                    <option value="2001:0db8:acad">2001:0db8:acad</option>
-                    <option value="0001">0001</option>
-                    <option value="0000:0000:0000:0001">0000:0000:0000:0001</option>
-                  </select>
-                </div>
+              <div className="mt-2">
+                <span className="text-[10px] text-brand-muted font-bold uppercase tracking-wider block mb-1">Destination Network</span>
+                {renderInlineChipSelector(task2Answers, setTask2Answers, "dest", [
+                  { val: "192.168.2.0", label: "192.168.2.0" },
+                  { val: "192.168.2.1", label: "192.168.2.1" }
+                ])}
+              </div>
+              <div className="mt-2">
+                <span className="text-[10px] text-brand-muted font-bold uppercase tracking-wider block mb-1">Subnet Mask</span>
+                {renderInlineChipSelector(task2Answers, setTask2Answers, "mask", [
+                  { val: "255.255.255.0", label: "255.255.255.0" },
+                  { val: "255.255.255.255", label: "255.255.255.255" }
+                ])}
+              </div>
+              <div className="mt-2">
+                <span className="text-[10px] text-brand-muted font-bold uppercase tracking-wider block mb-1">Next-Hop IP</span>
+                {renderInlineChipSelector(task2Answers, setTask2Answers, "hop", [
+                  { val: "10.0.0.2", label: "10.0.0.2" },
+                  { val: "10.0.0.1", label: "10.0.0.1" }
+                ])}
               </div>
             </div>
+          </div>
+        );
 
-            {isIpv6Correct ? (
-              <div className="bg-green-500/10 border border-green-500/20 text-green-400 p-4 rounded-xl text-center text-xs font-bold mt-2">
-                🎉 Correct configuration! Click Submit below to record your grade.
+      case 10: // Floating static route AD Choice
+        return renderOptionSelector(task2Answers, setTask2Answers, "adChoice", [
+          { val: "1", label: "1 (Standard Static AD)" },
+          { val: "90", label: "90 (EIGRP AD)" },
+          { val: "120", label: "120 (RIP AD - Floating Backup)" }
+        ]);
+
+      case 11: // Troubleshooting Static Routes
+        return renderOptionSelector(task2Answers, setTask2Answers, "rootCause", [
+          { val: "wrongSyntax", label: "Command syntax error" },
+          { val: "interfaceDown", label: "Next-hop interface is down / disconnected" },
+          { val: "wrongMask", label: "Incorrect mask size used" }
+        ]);
+
+      default:
+        return null;
+    }
+  };
+
+  const renderTask3Content = () => {
+    switch (moduleIdx) {
+      case 0: // Network Types
+        return renderInteractiveMatch(
+          task3Answers,
+          setTask3Answers,
+          [
+            { id: "netA", label: "Scenario A: Connecting workstations inside a local business office floor." },
+            { id: "netB", label: "Scenario B: Interconnecting office routers in Paris, New York, and Sydney." },
+            { id: "netC", label: "Scenario C: Employees connecting laptops wirelessly inside the cafeteria." }
+          ],
+          [
+            { val: "LAN", label: "LAN (Local Area Network)" },
+            { val: "WAN", label: "WAN (Wide Area Network)" },
+            { val: "WLAN", label: "WLAN (Wireless LAN)" }
+          ]
+        );
+
+      case 3: // Subnet capacity
+        return renderInteractiveMatch(
+          task3Answers,
+          setTask3Answers,
+          [
+            { id: "mask1", label: "/24 (255.255.255.0) Prefix" },
+            { id: "mask2", label: "/26 (255.255.255.192) Prefix" },
+            { id: "mask3", label: "/30 (255.255.255.252) Prefix" }
+          ],
+          [
+            { val: "254", label: "254 usable hosts" },
+            { val: "62", label: "62 usable hosts" },
+            { val: "2", label: "2 usable hosts" }
+          ]
+        );
+
+      case 6: // PC configuration inputs
+        const pcIpVal = task3Answers.ip || "_______________";
+        const pcMaskVal = task3Answers.mask || "_______________";
+        const pcGatewayVal = task3Answers.gateway || "_______________";
+        return (
+          <div className="bg-brand-bg/20 border border-brand-border/30 rounded-xl p-5 flex flex-col gap-6">
+            <div className="bg-brand-bg/15 border border-brand-border/20 rounded-xl p-4 font-mono text-xs leading-relaxed max-w-sm mx-auto w-full">
+              <div className="text-[10px] text-brand-muted uppercase font-bold tracking-wider mb-2 border-b border-brand-border/30 pb-1">PC1 NIC IPv4 Configuration</div>
+              <div className="flex justify-between py-1"><span>IP Address:</span> <span className="text-brand-cyan font-bold">{pcIpVal}</span></div>
+              <div className="flex justify-between py-1"><span>Subnet Mask:</span> <span className="text-brand-cyan font-bold">{pcMaskVal}</span></div>
+              <div className="flex justify-between py-1"><span>Default Gateway:</span> <span className="text-brand-cyan font-bold">{pcGatewayVal}</span></div>
+            </div>
+            <div className="flex flex-col gap-4">
+              <div>
+                <span className="text-[10px] text-brand-muted font-bold uppercase tracking-wider block mb-1">Select PC IP Address</span>
+                {renderInlineChipSelector(task3Answers, setTask3Answers, "ip", [
+                  { val: "192.168.1.1", label: "192.168.1.1" },
+                  { val: "192.168.1.10", label: "192.168.1.10" },
+                  { val: "192.168.1.256", label: "192.168.1.256" }
+                ])}
               </div>
-            ) : (
-              <div className="bg-brand-bg/30 border border-brand-border/30 text-brand-muted p-4 rounded-xl text-center text-xs mt-2">
-                Map each block: Global prefix represents network identifier (first 3 blocks), subnet ID represents routing division (4th block), Interface ID is device address (last 4 blocks).
+              <div className="mt-2">
+                <span className="text-[10px] text-brand-muted font-bold uppercase tracking-wider block mb-1">Select Subnet Mask</span>
+                {renderInlineChipSelector(task3Answers, setTask3Answers, "mask", [
+                  { val: "255.255.0.0", label: "255.255.0.0" },
+                  { val: "255.255.255.0", label: "255.255.255.0" },
+                  { val: "255.255.255.252", label: "255.255.255.252" }
+                ])}
               </div>
-            )}
-            <button
-              onClick={handleSubmitIpv6}
-              disabled={!ipv6Prefix || !ipv6Subnet || !ipv6Interface}
-              className="w-full mt-4 px-5 py-2.5 bg-brand-cyan hover:bg-brand-cyan-hover disabled:opacity-50 disabled:cursor-not-allowed text-brand-bg text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-md shrink-0"
-            >
-              {ipv6Score !== null ? "Resubmit Task 3" : "Submit Task 3"}
-            </button>
-            {ipv6Score !== null && (
-              <div className="bg-brand-cyan/15 border border-brand-cyan/25 px-4 py-2.5 rounded-xl flex items-center justify-between mt-2 animate-scaleIn">
-                <div className="text-[10px] text-brand-cyan uppercase tracking-wider font-bold">Recorded Score</div>
-                <div className="text-sm font-mono font-extrabold text-brand-cyan">{ipv6Score} / 3</div>
+              <div className="mt-2">
+                <span className="text-[10px] text-brand-muted font-bold uppercase tracking-wider block mb-1">Select Default Gateway</span>
+                {renderInlineChipSelector(task3Answers, setTask3Answers, "gateway", [
+                  { val: "0.0.0.0", label: "0.0.0.0" },
+                  { val: "192.168.1.1", label: "192.168.1.1" },
+                  { val: "192.168.1.10", label: "192.168.1.10" }
+                ])}
               </div>
-            )}
+            </div>
+          </div>
+        );
+
+      case 7: // CLI Banner Setup
+        const cliKwVal = task3Answers.kw || "___________";
+        const cliDelimVal = task3Answers.delim === "hash" ? "#" : task3Answers.delim === "quote" ? "\"" : "__";
+        const cliMsgVal = task3Answers.msg === "auth" ? "Authorized Access Only!" : task3Answers.msg === "authdelim" ? "#Authorized Access Only!" : "_________________________";
+        return (
+          <div className="bg-brand-bg/20 border border-brand-border/30 rounded-xl p-5 flex flex-col gap-6">
+            <div className="bg-brand-bg/15 border border-brand-border/20 rounded-xl p-4 font-mono text-xs leading-relaxed text-center">
+              Router(config)# <span className="text-brand-cyan font-bold">{cliKwVal} {cliDelimVal}{cliMsgVal}{cliDelimVal}</span>
+            </div>
+            <div className="flex flex-col gap-4">
+              <div>
+                <span className="text-[10px] text-brand-muted font-bold uppercase tracking-wider block mb-1">Command Keyword</span>
+                {renderInlineChipSelector(task3Answers, setTask3Answers, "kw", [
+                  { val: "bannermotd", label: "banner motd" },
+                  { val: "bannermotdmsg", label: "banner motd message" }
+                ])}
+              </div>
+              <div className="mt-2">
+                <span className="text-[10px] text-brand-muted font-bold uppercase tracking-wider block mb-1">Delimiter Character</span>
+                {renderInlineChipSelector(task3Answers, setTask3Answers, "delim", [
+                  { val: "hash", label: "#" },
+                  { val: "quote", label: "\"" }
+                ])}
+              </div>
+              <div className="mt-2">
+                <span className="text-[10px] text-brand-muted font-bold uppercase tracking-wider block mb-1">Warning Message Text</span>
+                {renderInlineChipSelector(task3Answers, setTask3Answers, "msg", [
+                  { val: "auth", label: "Authorized Access Only!" },
+                  { val: "authdelim", label: "#Authorized Access Only!" }
+                ])}
+              </div>
+            </div>
+          </div>
+        );
+
+      case 8: // RIP vs OSPF Metrics
+        return renderInteractiveMatch(
+          task3Answers,
+          setTask3Answers,
+          [
+            { id: "rip", label: "RIP Protocol Metric" },
+            { id: "ospf", label: "OSPF Protocol Metric" }
+          ],
+          [
+            { val: "hops", label: "Hop Count" },
+            { val: "cost", label: "Cost (Bandwidth)" }
+          ]
+        );
+
+      case 11: // IPv6 Static Route Assembly
+        const ipv6CmdVal = task3Answers.cmd || "__________";
+        const ipv6DestVal = task3Answers.dest || "_________________";
+        const ipv6HopVal = task3Answers.hop || "_______________";
+        return (
+          <div className="bg-brand-bg/20 border border-brand-border/30 rounded-xl p-5 flex flex-col gap-6">
+            <div className="bg-brand-bg/15 border border-brand-border/20 rounded-xl p-4 font-mono text-xs leading-relaxed text-center">
+              Router(config)# <span className="text-brand-cyan font-bold">{ipv6CmdVal} {ipv6DestVal} {ipv6HopVal}</span>
+            </div>
+            <div className="flex flex-col gap-4">
+              <div>
+                <span className="text-[10px] text-brand-muted font-bold uppercase tracking-wider block mb-1">Command Prefix</span>
+                {renderInlineChipSelector(task3Answers, setTask3Answers, "cmd", [
+                  { val: "iproute", label: "ip route" },
+                  { val: "ipv6route", label: "ipv6 route" }
+                ])}
+              </div>
+              <div className="mt-2">
+                <span className="text-[10px] text-brand-muted font-bold uppercase tracking-wider block mb-1">Destination Network / Prefix</span>
+                {renderInlineChipSelector(task3Answers, setTask3Answers, "dest", [
+                  { val: "ipv6prefix", label: "2001:db8:2::/64" },
+                  { val: "ipv6prefixno", label: "2001:db8:2::" }
+                ])}
+              </div>
+              <div className="mt-2">
+                <span className="text-[10px] text-brand-muted font-bold uppercase tracking-wider block mb-1">Next-Hop IPv6 Address</span>
+                {renderInlineChipSelector(task3Answers, setTask3Answers, "hop", [
+                  { val: "ipv6hop", label: "2001:db8:1::2" },
+                  { val: "ipv6hopno", label: "2001:db8:1::1" }
+                ])}
+              </div>
+            </div>
+          </div>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  const getTaskScore = (taskNum: number): number | null => {
+    if (taskNum === 1) return task1Score;
+    if (taskNum === 2) return task2Score;
+    return task3Score;
+  };
+
+  const isTaskSubmitDisabled = (taskNum: number): boolean => {
+    if (taskNum === 1) {
+      switch (moduleIdx) {
+        case 0: return !task1Answers.Router || !task1Answers.Switch || !task1Answers.Host || !task1Answers.Firewall;
+        case 1: return !task1Answers.OSIApp || !task1Answers.OSITrans || !task1Answers.OSINet || !task1Answers.OSIPhys;
+        case 2: return !task1Answers.DNS || !task1Answers.HTTP || !task1Answers.DHCP || !task1Answers.SMTP;
+        case 3: return !task1Answers.ip1 || !task1Answers.ip2 || !task1Answers.ip3 || !task1Answers.ip4;
+        case 4: return !task1Answers.oui || !task1Answers.nic;
+        case 5: return !task1Answers.step1 || !task1Answers.step2 || !task1Answers.step3 || !task1Answers.step4 || !task1Answers.step5;
+        case 6: return !task1Answers.RouterUser || !task1Answers.RouterPriv || !task1Answers.RouterGlobal || !task1Answers.RouterInterface;
+        case 7: return !task1Answers.RAM || !task1Answers.NVRAM || !task1Answers.Flash || !task1Answers.ROM;
+        case 8: return !task1Answers.route;
+        case 9: return !task1Answers.exitIf || !task1Answers.nextHop;
+        case 10: return !task1Answers.allZeros || !task1Answers.gateway;
+        case 11: return !task1Answers.summary;
+        default: return false;
+      }
+    } else if (taskNum === 2) {
+      switch (moduleIdx) {
+        case 0: return !task2Answers.scenarioA || !task2Answers.scenarioB || !task2Answers.scenarioC;
+        case 1: return !task2Answers.p2p || !task2Answers.clientServer;
+        case 2: return !task2Answers.step1 || !task2Answers.step2 || !task2Answers.step3 || !task2Answers.step4 || !task2Answers.step5;
+        case 3: return !andingDecimal.trim();
+        case 4: return !task2Answers.scenA || !task2Answers.scenB;
+        case 5: return !task2Answers.action1 || !task2Answers.action2 || !task2Answers.action3;
+        case 6: return !task2Answers.hostname || !task2Answers.secret || !task2Answers.save || !task2Answers.ping;
+        case 7: return !task2Answers.s1 || !task2Answers.s2 || !task2Answers.s3 || !task2Answers.s4;
+        case 8: return !task2Answers.methodA || !task2Answers.methodB;
+        case 9: return !task2Answers.prefix || !task2Answers.dest || !task2Answers.mask || !task2Answers.hop;
+        case 10: return !task2Answers.adChoice;
+        case 11: return !task2Answers.rootCause;
+        default: return false;
+      }
+    } else {
+      switch (moduleIdx) {
+        case 0: return !task3Answers.netA || !task3Answers.netB || !task3Answers.netC;
+        case 3: return !task3Answers.mask1 || !task3Answers.mask2 || !task3Answers.mask3;
+        case 6: return !task3Answers.ip || !task3Answers.mask || !task3Answers.gateway;
+        case 7: return !task3Answers.kw || !task3Answers.delim || !task3Answers.msg;
+        case 8: return !task3Answers.rip || !task3Answers.ospf;
+        case 11: return !task3Answers.cmd || !task3Answers.dest || !task3Answers.hop;
+        default: return false;
+      }
+    }
+  };
+
+  const renderActiveTask = () => {
+    const isCorrect = checkTaskCorrect(activeTab);
+    const score = getTaskScore(activeTab);
+    const maxScore = getTaskMaxScore(activeTab);
+
+    return (
+      <div className="flex flex-col gap-4">
+        <div className="bg-brand-bg/40 border border-brand-border/30 rounded-xl p-4">
+          <h3 className="font-bold text-sm text-brand-cyan mb-1">{getTaskTitle(activeTab)}</h3>
+          <p className="text-xs text-brand-muted leading-relaxed">
+            {getTaskDescription(activeTab)}
+          </p>
+        </div>
+
+        {activeTab === 1 && renderTask1Content()}
+        {activeTab === 2 && renderTask2Content()}
+        {activeTab === 3 && renderTask3Content()}
+
+        {isCorrect ? (
+          <div className="bg-green-500/10 border border-green-500/20 text-green-400 p-4 rounded-xl text-center text-xs font-bold mt-2">
+            🎉 Correct configuration! Click Submit below to record your grade.
+          </div>
+        ) : (
+          <div className="bg-brand-bg/30 border border-brand-border/30 text-brand-muted p-4 rounded-xl text-center text-xs mt-2">
+            Select or enter the correct parameters matching the scenario rules.
+          </div>
+        )}
+
+        <button
+          onClick={() => handleSubmitTask(activeTab)}
+          disabled={isTaskSubmitDisabled(activeTab)}
+          className="w-full mt-4 px-5 py-2.5 bg-brand-cyan hover:bg-brand-cyan-hover disabled:opacity-50 disabled:cursor-not-allowed text-brand-bg text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-md shrink-0"
+        >
+          {score !== null ? `Resubmit Task ${activeTab}` : `Submit Task ${activeTab}`}
+        </button>
+
+        {score !== null && (
+          <div className="bg-brand-cyan/15 border border-brand-cyan/25 px-4 py-2.5 rounded-xl flex items-center justify-between mt-2 animate-scaleIn">
+            <div className="text-[10px] text-brand-cyan uppercase tracking-wider font-bold">Recorded Score</div>
+            <div className="text-sm font-mono font-extrabold text-brand-cyan">{score} / {maxScore}</div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  if (!activityStarted && !isCompletedFinal) {
+    return (
+      <div className="bg-brand-card/40 border border-brand-border/30 rounded-2xl p-8 text-center flex flex-col items-center justify-center min-h-[400px] select-none gap-6 max-w-xl mx-auto shadow-xl">
+        <div className="w-16 h-16 rounded-full bg-brand-cyan/10 border border-brand-cyan flex items-center justify-center text-brand-cyan animate-pulse">
+          <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+        </div>
+        <div>
+          <h3 className="text-lg font-extrabold text-brand-text mb-2">Secure Assessment Mode Required</h3>
+          <p className="text-xs text-brand-muted leading-relaxed">
+            To ensure academic integrity, this interactive activity runs in **Secure Fullscreen Mode**.
+          </p>
+        </div>
+        <ul className="text-left text-xs text-brand-muted space-y-2 border-y border-brand-border/30 py-4 w-full">
+          <li className="flex items-start gap-2">
+            <span className="text-brand-cyan font-bold">•</span>
+            <span><strong>12-Minute Time Limit:</strong> Timer auto-submits answers on expiry.</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-brand-cyan font-bold">•</span>
+            <span><strong>Fullscreen Enforced:</strong> Do not exit fullscreen. Exiting counts as a warning.</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-brand-cyan font-bold">•</span>
+            <span><strong>Cheat Prevention:</strong> Max 3 warnings (exiting fullscreen or shifting tabs) before the session auto-locks.</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-brand-cyan font-bold">•</span>
+            <span><strong>Copy Protected:</strong> Copying, cutting, pasting, and right-clicks are disabled.</span>
+          </li>
+        </ul>
+        <button
+          onClick={handleStartActivity}
+          className="w-full py-3 bg-brand-cyan hover:bg-brand-cyan-hover text-brand-bg text-xs font-mono font-extrabold uppercase tracking-wider rounded-xl transition-all shadow-lg hover:shadow-brand-cyan/20 cursor-pointer"
+        >
+          Begin Secure Assessment
+        </button>
+      </div>
+    );
+  }
+
+  if (activityStarted && !isFullscreenActive && !isCompletedFinal && !isLocked) {
+    return (
+      <div className="bg-red-500/5 border border-red-500/20 rounded-2xl p-8 text-center flex flex-col items-center justify-center min-h-[400px] select-none gap-6 max-w-xl mx-auto shadow-xl">
+        <div className="w-16 h-16 rounded-full bg-red-500/10 border border-red-500 flex items-center justify-center text-red-400 animate-bounce">
+          <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+        </div>
+        <div>
+          <h3 className="text-lg font-extrabold text-red-400 mb-2">Security Warning: Fullscreen Exited</h3>
+          <p className="text-xs text-brand-muted leading-relaxed">
+            You have exited fullscreen mode. Please re-enter immediately to continue the assessment.
+          </p>
+        </div>
+        <div className="bg-red-500/10 border border-red-500/20 px-4 py-2.5 rounded-xl text-xs font-bold text-red-400">
+          ⚠️ Warnings Left: {warningsLeft} / 3. Shifting focus or exiting again will LOCK your session.
+        </div>
+        <button
+          onClick={handleStartActivity}
+          className="w-full py-3 bg-red-500 hover:bg-red-600 text-white text-xs font-mono font-extrabold uppercase tracking-wider rounded-xl transition-all shadow-lg cursor-pointer"
+        >
+          Re-enter Fullscreen & Resume
+        </button>
+      </div>
+    );
+  }
+
+  if (isLocked) {
+    return (
+      <div className="bg-brand-card/40 border border-brand-border/30 rounded-2xl p-8 text-center flex flex-col items-center justify-center min-h-[400px] select-none gap-6 max-w-xl mx-auto shadow-xl">
+        <div className="w-16 h-16 rounded-full bg-red-500/10 border border-red-500 flex items-center justify-center text-red-400">
+          <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+        </div>
+        <div>
+          <h3 className="text-lg font-extrabold text-brand-text mb-2">Session Locked</h3>
+          <p className="text-xs text-brand-muted leading-relaxed">
+            This interactive activity has been auto-submitted and locked due to either running out of time, exiting fullscreen repeatedly, or changing tabs.
+          </p>
+        </div>
+        <div className="bg-brand-cyan/15 border border-brand-cyan/20 px-6 py-3.5 rounded-xl w-full flex items-center justify-between">
+          <span className="text-xs font-bold text-brand-text uppercase tracking-wider">Final Assessment Score</span>
+          <span className="text-base font-mono font-black text-brand-cyan">{getModuleCurrentScore()} / {getModuleMaxScore()}</span>
+        </div>
+        <button
+          onClick={handleSelectNextTopic}
+          className="w-full py-3 bg-brand-cyan hover:bg-brand-cyan-hover text-brand-bg text-xs font-mono font-extrabold uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+        >
+          Continue to Next Topic
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-grow flex flex-col gap-6 select-none" onContextMenu={(e) => e.preventDefault()} onCopy={(e) => e.preventDefault()} onCut={(e) => e.preventDefault()}>
+      {/* Session Timer & Security Stats Header */}
+      {!isCompletedFinal && (
+        <div className="bg-brand-card/30 border border-brand-border/40 rounded-xl px-4 py-3 flex flex-col sm:flex-row justify-between items-center gap-3">
+          <div className="flex items-center gap-2 text-xs font-semibold text-brand-text">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={timerLeft < 120 ? "text-red-400 animate-pulse" : "text-brand-cyan"}><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            <span>Time Remaining:</span>
+            <span className={`font-mono font-bold ${timerLeft < 120 ? "text-red-400 animate-pulse text-sm" : "text-brand-cyan"}`}>
+              {Math.floor(timerLeft / 60)}:{(timerLeft % 60).toString().padStart(2, '0')}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 text-xs font-semibold text-brand-text">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-red-400"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+            <span>Warnings Remaining:</span>
+            <span className="font-bold text-red-400">{warningsLeft} / 3</span>
           </div>
         </div>
       )}
 
+      {/* Tabs */}
+      <div className="flex border-b border-brand-border/40">
+        <button
+          onClick={() => setActiveTab(1)}
+          className={`px-4 py-3 text-xs font-bold transition-all border-b-2 cursor-pointer ${activeTab === 1
+            ? "border-brand-cyan text-brand-cyan"
+            : "border-transparent text-brand-muted hover:text-brand-text"
+            }`}
+        >
+          Task 1: {getTaskTitle(1).slice(0, 15)}... {task1Score !== null ? `(${task1Score}/${getTaskMaxScore(1)}) ✓` : ""}
+        </button>
+        <button
+          onClick={() => setActiveTab(2)}
+          className={`px-4 py-3 text-xs font-bold transition-all border-b-2 cursor-pointer ${activeTab === 2
+            ? "border-brand-cyan text-brand-cyan"
+            : "border-transparent text-brand-muted hover:text-brand-text"
+            }`}
+        >
+          Task 2: {getTaskTitle(2).slice(0, 15)}... {task2Score !== null ? `(${task2Score}/${getTaskMaxScore(2)}) ✓` : ""}
+        </button>
+        {totalTasks === 3 && (
+          <button
+            onClick={() => setActiveTab(3)}
+            className={`px-4 py-3 text-xs font-bold transition-all border-b-2 cursor-pointer ${activeTab === 3
+              ? "border-brand-cyan text-brand-cyan"
+              : "border-transparent text-brand-muted hover:text-brand-text"
+              }`}
+          >
+            Task 3: {getTaskTitle(3).slice(0, 15)}... {task3Score !== null ? `(${task3Score}/${getTaskMaxScore(3)}) ✓` : ""}
+          </button>
+        )}
+      </div>
+
+      {renderActiveTask()}
+
       {/* Completion Banner */}
-      {isCompleted || (vlsmScore !== null && andingScore !== null && ipv6Score !== null) ? (
+      {isCompletedFinal ? (
         <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-6 animate-scaleIn">
           <div>
             <h3 className="font-bold text-sm text-green-400 flex items-center gap-1.5">
               🎉 Interactive Activity Completed!
             </h3>
             <p className="text-xs text-brand-muted mt-1 leading-relaxed">
-              Excellent job! You successfully submitted and auto-graded all three subnetting tasks.
+              Excellent job! You successfully submitted and auto-graded all tasks for this module.
             </p>
             <div className="mt-2 text-xs text-brand-text flex items-center gap-2">
               <span className="text-[10px] bg-brand-cyan/15 border border-brand-cyan/20 text-brand-cyan px-2 py-0.5 rounded font-mono font-bold">
-                Overall Grade: {(vlsmScore || 0) + (andingScore || 0) + (ipv6Score || 0)} / 20
+                Overall Grade: {getModuleCurrentScore()} / {getModuleMaxScore()}
               </span>
             </div>
           </div>
@@ -625,7 +2098,7 @@ function InteractiveSubnettingActivity({ onComplete, isCompleted, handleSelectNe
         </div>
       ) : (
         <div className="bg-brand-bg/10 border border-brand-border/40 rounded-xl p-4 text-center text-xs text-brand-muted mt-6">
-          Submit all 3 tasks (VLSM, ANDing, and IPv6 Structure) to finish this activity and record your overall grade.
+          Submit all {totalTasks} tasks to finish this activity and record your overall grade.
         </div>
       )}
     </div>
@@ -752,6 +2225,20 @@ export default function StudentCurriculum() {
   // Subject Overview States
   const [selectedSpecialItem, setSelectedSpecialItem] = useState<"announcements" | "self-introduction" | "subject-guide" | null>(null);
   const [expandedSubjectOverview, setExpandedSubjectOverview] = useState(true);
+  const [openedGeneralItems, setOpenedGeneralItems] = useState<string[]>([]);
+  const isGeneralCompleted = openedGeneralItems.includes("announcements") &&
+                            openedGeneralItems.includes("self-introduction") &&
+                            openedGeneralItems.includes("subject-guide");
+
+  const markGeneralItemAsOpened = (item: "announcements" | "self-introduction" | "subject-guide") => {
+    setOpenedGeneralItems((prev) => {
+      if (prev.includes(item)) return prev;
+      const updated = [...prev, item];
+      const savedName = localStorage.getItem("userName") || "Student";
+      localStorage.setItem(`opened_general_${savedName}`, JSON.stringify(updated));
+      return updated;
+    });
+  };
 
   // Embedded Discussions States
   const [selfIntroPosts, setSelfIntroPosts] = useState<any[]>([]);
@@ -841,7 +2328,7 @@ export default function StudentCurriculum() {
         });
 
         if (topic.subtopics && topic.subtopics.length > 0) {
-          topic.subtopics.forEach((sub) => {
+          topic.subtopics.forEach((sub: any) => {
             list.push({
               moduleId: mod.id,
               topic: topic,
@@ -1414,7 +2901,16 @@ export default function StudentCurriculum() {
       doc.setFontSize(10);
       doc.setTextColor(100, 100, 100);
 
-      const previewTopics = getPreviewTopics(mod.topics);
+      const previewTopics = getPreviewTopics(mod.topics).filter(t => {
+        const titleUpper = t.title.toUpperCase().trim();
+        return !isDiscussionTopic(t.id) &&
+               !isInteractiveTopic(t.id) &&
+               titleUpper !== "MODULE DISCUSSION FORUM" &&
+               titleUpper !== "INTERACTIVE SUBNETTING ACTIVITY" &&
+               titleUpper !== "INTERACTIVE ACTIVITY" &&
+               !titleUpper.includes("DISCUSSION") &&
+               !titleUpper.includes("INTERACTIVE");
+      });
       const totalMaterials = previewTopics.reduce((sum, t) => {
         let count = (t.materials || []).length;
         count += (t.subtopics || []).reduce((sSum: number, s: any) => sSum + (s.materials || []).length, 0);
@@ -1612,6 +3108,14 @@ export default function StudentCurriculum() {
 
   useEffect(() => {
     const savedName = localStorage.getItem("userName") || "Student";
+    const storedGeneral = localStorage.getItem(`opened_general_${savedName}`);
+    if (storedGeneral) {
+      try {
+        setOpenedGeneralItems(JSON.parse(storedGeneral));
+      } catch (e) {
+        console.error("Failed to parse opened general items:", e);
+      }
+    }
     const storedCompleted = localStorage.getItem(`completed_topics_${savedName}`);
     if (storedCompleted) {
       try {
@@ -1663,7 +3167,7 @@ export default function StudentCurriculum() {
 
   useEffect(() => {
     const handleScroll = () => {
-      if (!selectedTopic || isModuleOverviewActive || selectedTopic.id === 999999) return;
+      if (!selectedTopic || isModuleOverviewActive || isInteractiveTopic(selectedTopic.id)) return;
       if (!workspaceRef.current) return;
 
       const element = workspaceRef.current;
@@ -1744,7 +3248,7 @@ export default function StudentCurriculum() {
 
   const getTopicProgress = (topic: Topic): number => {
     if (completedTopics[topic.id]) return 100;
-    if (topic.id === 999999) return 0;
+    if (isInteractiveTopic(topic.id)) return 0;
     const videoMat = getTopicVideoMaterial(topic);
     const isVideoWatched = videoMat ? watchedVideos[videoMat.id] === true : false;
     const scrollVal = scrollProgress[topic.id] || 0;
@@ -1811,45 +3315,75 @@ export default function StudentCurriculum() {
     });
   };
 
+  const getModuleIndex = (moduleId: number): number => {
+    const ids = [
+      1782134355228, // Introduction to Networking
+      1782182808093, // Communicating Over The InternetPart 1
+      1782181968596, // Communicating Over The Internet Part 2
+      1782184909611, // Addressing IPv4
+      1782185665993, // Ethernet Part 1
+      1782186311891, // Ethernet Part 2
+      1782186928370, // Network Configuration
+      1782197552474, // Basic Router Configuration
+      1782198533015, // Routing Protocol Concepts
+      1782199846377, // Static Routing Part 1
+      1782200580841, // Static Routing Part 2
+      1782203599448  // Advance Static Routing
+    ];
+    const idx = ids.indexOf(moduleId);
+    return idx !== -1 ? idx : 0;
+  };
+
+  const isDiscussionTopic = (topicId: number): boolean => {
+    return topicId >= 88888800 && topicId <= 88888899;
+  };
+
+  const isInteractiveTopic = (topicId: number): boolean => {
+    return topicId >= 99999900 && topicId <= 99999999;
+  };
+
   const ensureInteractiveActivity = (mods: Module[]): Module[] => {
     if (mods.length === 0) return mods;
-    return mods.map((mod, idx) => {
-      if (idx === 0) {
-        const baseTopics = mod.topics.filter(t => t.id !== 888888 && t.id !== 999999);
-        return {
-          ...mod,
-          topics: [
-            ...baseTopics,
-            {
-              id: 888888,
-              title: "Module Discussion Forum",
-              materials: [
-                {
-                  id: 8888881,
-                  type: "text",
-                  title: "Discussion Feed",
-                  content: "module-discussion-placeholder"
-                }
-              ],
-              subtopics: []
-            },
-            {
-              id: 999999,
-              title: "Interactive Subnetting Activity",
-              materials: [
-                {
-                  id: 9999991,
-                  type: "text",
-                  title: "Hands-on Exercises",
-                  content: "interactive-activity-placeholder"
-                }
-              ],
-              subtopics: []
-            }
-          ]
-        };
-      }
-      return mod;
+    return mods.map((mod) => {
+      const idx = getModuleIndex(mod.id);
+      const baseTopics = mod.topics.filter(t => 
+        (t.id < 88888800 || t.id > 99999999) &&
+        t.title !== "Module Discussion Forum" &&
+        t.title !== "Interactive Subnetting Activity" &&
+        t.title !== "Interactive Activity"
+      );
+      return {
+        ...mod,
+        topics: [
+          ...baseTopics,
+          {
+            id: 88888800 + idx,
+            title: "Module Discussion Forum",
+            materials: [
+              {
+                id: 88888810 + idx,
+                type: "text",
+                title: "Discussion Feed",
+                content: "module-discussion-placeholder"
+              }
+            ],
+            subtopics: []
+          },
+          {
+            id: 99999900 + idx,
+            title: "Interactive Activity",
+            materials: [
+              {
+                id: 99999910 + idx,
+                type: "text",
+                title: "Hands-on Exercises",
+                content: "interactive-activity-placeholder"
+              }
+            ],
+            subtopics: []
+          }
+        ]
+      };
     });
   };
 
@@ -2063,11 +3597,12 @@ export default function StudentCurriculum() {
 
   // Check if scrolled to bottom to unlock Interactive activity
   const checkChatScrolledToBottom = () => {
-    if (!moduleChatScrollRef.current) return;
+    if (!moduleChatScrollRef.current || !selectedModuleId) return;
     const { scrollTop, clientHeight, scrollHeight } = moduleChatScrollRef.current;
     if (scrollTop + clientHeight >= scrollHeight - 20) {
-      if (!completedTopics[888888]) {
-        toggleTopicCompletion(888888);
+      const discId = 88888800 + getModuleIndex(selectedModuleId);
+      if (!completedTopics[discId]) {
+        toggleTopicCompletion(discId);
       }
     }
   };
@@ -2081,26 +3616,27 @@ export default function StudentCurriculum() {
 
   // Trigger module-discussion fetch on selection
   useEffect(() => {
-    if (selectedTopic?.id === 888888 && selectedModuleId) {
+    if (selectedTopic && isDiscussionTopic(selectedTopic.id) && selectedModuleId) {
       fetchModuleDiscussionPosts(selectedModuleId);
     }
   }, [selectedTopic, selectedModuleId]);
 
   // Handle auto-complete for short discussions with no scrollbar
   useEffect(() => {
-    if (selectedTopic?.id === 888888 && moduleDiscussionPosts.length > 0) {
+    if (selectedTopic && isDiscussionTopic(selectedTopic.id) && moduleDiscussionPosts.length > 0 && selectedModuleId) {
       setTimeout(() => {
         if (moduleChatScrollRef.current) {
           const { scrollTop, clientHeight, scrollHeight } = moduleChatScrollRef.current;
           if (scrollHeight <= clientHeight + 10) {
-            if (!completedTopics[888888]) {
-              toggleTopicCompletion(888888);
+            const discId = 88888800 + getModuleIndex(selectedModuleId);
+            if (!completedTopics[discId]) {
+              toggleTopicCompletion(discId);
             }
           }
         }
       }, 350);
     }
-  }, [moduleDiscussionPosts, selectedTopic]);
+  }, [moduleDiscussionPosts, selectedTopic, selectedModuleId]);
 
   const toggleModuleExpand = (moduleId: number) => {
     setExpandedModules(prev => ({ ...prev, [moduleId]: !prev[moduleId] }));
@@ -2438,14 +3974,38 @@ export default function StudentCurriculum() {
                           setSelectedSubtopic(null);
                           setSelectedModuleId(null);
                           setTakingPretest(false);
+                          markGeneralItemAsOpened("announcements");
                         }}
-                        className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${selectedSpecialItem === "announcements"
+                        className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-between ${selectedSpecialItem === "announcements"
                             ? "bg-brand-cyan text-brand-bg font-bold shadow-sm"
                             : "text-brand-muted hover:text-brand-text hover:bg-brand-bg/40"
                           }`}
                       >
-                        <span>📢</span>
-                        <span>Announcements</span>
+                        <div className="flex items-center gap-2">
+                          <span>📢</span>
+                          <span>Announcements</span>
+                        </div>
+                        {openedGeneralItems.includes("announcements") && (
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className={`shrink-0 ${
+                              selectedSpecialItem === "announcements"
+                                ? "text-green-800"
+                                : "text-green-500"
+                            }`}
+                          >
+                            <circle cx="12" cy="12" r="10" />
+                            <path d="m9 12 2 2 4-4" />
+                          </svg>
+                        )}
                       </button>
 
                       {/* Self-introduction */}
@@ -2456,14 +4016,38 @@ export default function StudentCurriculum() {
                           setSelectedSubtopic(null);
                           setSelectedModuleId(null);
                           setTakingPretest(false);
+                          markGeneralItemAsOpened("self-introduction");
                         }}
-                        className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${selectedSpecialItem === "self-introduction"
+                        className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-between ${selectedSpecialItem === "self-introduction"
                             ? "bg-brand-cyan text-brand-bg font-bold shadow-sm"
                             : "text-brand-muted hover:text-brand-text hover:bg-brand-bg/40"
                           }`}
                       >
-                        <span>👋</span>
-                        <span>Self-introduction</span>
+                        <div className="flex items-center gap-2">
+                          <span>👋</span>
+                          <span>Self-introduction</span>
+                        </div>
+                        {openedGeneralItems.includes("self-introduction") && (
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className={`shrink-0 ${
+                              selectedSpecialItem === "self-introduction"
+                                ? "text-green-800"
+                                : "text-green-500"
+                            }`}
+                          >
+                            <circle cx="12" cy="12" r="10" />
+                            <path d="m9 12 2 2 4-4" />
+                          </svg>
+                        )}
                       </button>
 
                       {/* Subject Guide */}
@@ -2474,14 +4058,38 @@ export default function StudentCurriculum() {
                           setSelectedSubtopic(null);
                           setSelectedModuleId(null);
                           setTakingPretest(false);
+                          markGeneralItemAsOpened("subject-guide");
                         }}
-                        className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${selectedSpecialItem === "subject-guide"
+                        className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-between ${selectedSpecialItem === "subject-guide"
                             ? "bg-brand-cyan text-brand-bg font-bold shadow-sm"
                             : "text-brand-muted hover:text-brand-text hover:bg-brand-bg/40"
                           }`}
                       >
-                        <span>📄</span>
-                        <span>[MUST READ] Subject Guide</span>
+                        <div className="flex items-center gap-2">
+                          <span>📄</span>
+                          <span>[MUST READ] Subject Guide</span>
+                        </div>
+                        {openedGeneralItems.includes("subject-guide") && (
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className={`shrink-0 ${
+                              selectedSpecialItem === "subject-guide"
+                                ? "text-green-800"
+                                : "text-green-500"
+                            }`}
+                          >
+                            <circle cx="12" cy="12" r="10" />
+                            <path d="m9 12 2 2 4-4" />
+                          </svg>
+                        )}
                       </button>
                     </div>
                   )}
@@ -2532,51 +4140,78 @@ export default function StudentCurriculum() {
                       {/* Topics List within Module */}
                       {isModExpanded && (
                         <div className="p-2 flex flex-col gap-1.5 bg-brand-card/30">
-                          {mod.pretest && mod.pretest.length > 0 && (
-                            <button
-                              onClick={() => {
-                                setSelectedModuleId(mod.id);
-                                setSelectedTopic(null);
-                                setSelectedSubtopic(null);
-                                setSelectedSpecialItem(null);
-                                setTakingPretest(true);
-                              }}
-                              className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors ${
-                                takingPretest && selectedModuleId === mod.id && selectedTopic === null
-                                  ? "bg-brand-cyan text-brand-bg font-bold shadow-sm"
-                                  : "text-brand-muted hover:text-brand-text hover:bg-brand-bg/40"
-                              }`}
-                            >
-                              <div className="flex items-center gap-2 text-sm font-bold min-w-0 flex-grow whitespace-normal break-words leading-tight">
-                                {completedPretests && completedPretests[mod.id] ? (
-                                  <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    width="14"
-                                    height="14"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2.5"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    className={`shrink-0 ${
-                                      takingPretest && selectedModuleId === mod.id && selectedTopic === null
-                                        ? "text-green-800"
-                                        : "text-green-500"
-                                    }`}
-                                  >
-                                    <circle cx="12" cy="12" r="10" />
-                                    <path d="m9 12 2 2 4-4" />
-                                  </svg>
-                                ) : (
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-brand-border/40">
-                                    <circle cx="12" cy="12" r="10" />
-                                  </svg>
+                          {mod.pretest && mod.pretest.length > 0 && (() => {
+                            const isPretestLocked = mod.id === 1782134355228 && !isGeneralCompleted;
+                            return (
+                              <button
+                                disabled={isPretestLocked}
+                                onClick={() => {
+                                  setSelectedModuleId(mod.id);
+                                  setSelectedTopic(null);
+                                  setSelectedSubtopic(null);
+                                  setSelectedSpecialItem(null);
+                                  setTakingPretest(true);
+                                }}
+                                className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+                                  isPretestLocked
+                                    ? "opacity-50 cursor-not-allowed text-brand-muted bg-brand-bg/10"
+                                    : takingPretest && selectedModuleId === mod.id && selectedTopic === null
+                                      ? "bg-brand-cyan text-brand-bg font-bold shadow-sm cursor-pointer"
+                                      : "text-brand-muted hover:text-brand-text hover:bg-brand-bg/40 cursor-pointer"
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 text-sm font-bold min-w-0 flex-grow whitespace-normal break-words leading-tight">
+                                  {isPretestLocked ? (
+                                    <svg
+                                      xmlns="http://www.w3.org/2000/svg"
+                                      width="14"
+                                      height="14"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2.5"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      className="shrink-0 text-brand-muted/70"
+                                    >
+                                      <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+                                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                                    </svg>
+                                  ) : completedPretests && completedPretests[mod.id] ? (
+                                    <svg
+                                      xmlns="http://www.w3.org/2000/svg"
+                                      width="14"
+                                      height="14"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2.5"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      className={`shrink-0 ${
+                                        takingPretest && selectedModuleId === mod.id && selectedTopic === null
+                                          ? "text-green-800"
+                                          : "text-green-500"
+                                      }`}
+                                    >
+                                      <circle cx="12" cy="12" r="10" />
+                                      <path d="m9 12 2 2 4-4" />
+                                    </svg>
+                                  ) : (
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-brand-border/40">
+                                      <circle cx="12" cy="12" r="10" />
+                                    </svg>
+                                  )}
+                                  <span>📝 Module Pre-test</span>
+                                </div>
+                                {isPretestLocked && (
+                                  <span className="text-[8px] uppercase tracking-wider bg-brand-bg/60 text-brand-muted px-1.5 py-0.5 rounded border border-brand-border/20">
+                                    Locked
+                                  </span>
                                 )}
-                                <span>📝 Module Pre-test</span>
-                              </div>
-                            </button>
-                          )}
+                              </button>
+                            );
+                          })()}
 
                           {getPreviewTopics(mod.topics).length === 0 ? (
                             <div className="text-[10px] text-brand-muted/70 px-3 py-2 italic">
@@ -2693,7 +4328,7 @@ export default function StudentCurriculum() {
                                   {/* Subtopics Listing */}
                                   {hasSubtopics && isTopicExpanded && (
                                     <div className="pl-4 pr-1 mt-1 flex flex-col gap-1 border-l border-brand-border/40 ml-4 py-0.5">
-                                      {topic.subtopics!.map((sub) => {
+                                      {topic.subtopics!.map((sub: any) => {
                                         const isSubSelected = selectedSubtopic?.id === sub.id;
 
                                         return (
@@ -2928,10 +4563,10 @@ export default function StudentCurriculum() {
                             const materialsList = topic.materials || [];
                             const subtopicsList = topic.subtopics || [];
 
-                            const hasVideo = materialsList.some(m => m.type === "video") || subtopicsList.flatMap(s => s.materials || []).some(m => m.type === "video");
-                            const hasText = materialsList.some(m => m.type === "text") || subtopicsList.flatMap(s => s.materials || []).some(m => m.type === "text");
-                            const hasFile = materialsList.some(m => m.type === "file") || subtopicsList.flatMap(s => s.materials || []).some(m => m.type === "file");
-                            const hasImage = materialsList.some(m => m.type === "image") || subtopicsList.flatMap(s => s.materials || []).some(m => m.type === "image");
+                            const hasVideo = materialsList.some((m: any) => m.type === "video") || subtopicsList.flatMap((s: any) => s.materials || []).some((m: any) => m.type === "video");
+                            const hasText = materialsList.some((m: any) => m.type === "text") || subtopicsList.flatMap((s: any) => s.materials || []).some((m: any) => m.type === "text");
+                            const hasFile = materialsList.some((m: any) => m.type === "file") || subtopicsList.flatMap((s: any) => s.materials || []).some((m: any) => m.type === "file");
+                            const hasImage = materialsList.some((m: any) => m.type === "image") || subtopicsList.flatMap((s: any) => s.materials || []).some((m: any) => m.type === "image");
 
                             return (
                               <div
@@ -3086,22 +4721,23 @@ export default function StudentCurriculum() {
 
                       {/* Materials Rendering */}
                       <div className="flex-grow flex flex-col gap-6">
-                        {selectedTopic!.id === 999999 ? (
+                        {isInteractiveTopic(selectedTopic!.id) ? (
                           <InteractiveSubnettingActivity
                             onComplete={() => {
-                              if (!completedTopics[999999]) {
-                                toggleTopicCompletion(999999);
+                              const interId = 99999900 + getModuleIndex(selectedModule!.id);
+                              if (!completedTopics[interId]) {
+                                toggleTopicCompletion(interId);
                               }
                             }}
-                            isCompleted={completedTopics[999999] === true}
+                            isCompleted={completedTopics[99999900 + getModuleIndex(selectedModule!.id)] === true}
                             handleSelectNextTopic={handleSelectNextTopic}
                             moduleId={selectedModule!.id}
                           />
-                        ) : selectedTopic!.id === 888888 ? (
+                        ) : isDiscussionTopic(selectedTopic!.id) ? (
                           // MODULE DISCUSSION FORUM VIEW
                           <div className="flex-grow flex flex-col h-full animate-scaleIn">
                             <p className="text-brand-muted text-xs mb-3">
-                              Ask questions, share subnetting tips, and collaborate on this module's topics.
+                              Ask questions, share networking tips, and collaborate on this module's topics.
                               <strong> You must scroll to the bottom of the feed to proceed.</strong>
                             </p>
 
@@ -3161,10 +4797,10 @@ export default function StudentCurriculum() {
 
                             {/* Status Indicator */}
                             <div className="mb-4">
-                              {completedTopics[888888] ? (
+                              {completedTopics[88888800 + getModuleIndex(selectedModule!.id)] ? (
                                 <div className="bg-green-500/10 border border-green-500/25 text-green-400 p-3 rounded-xl text-xs flex items-center gap-2 animate-scaleIn">
                                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-                                  <span>Module discussion completed. You are now cleared to start the <strong>Interactive Subnetting Activity</strong>!</span>
+                                  <span>Module discussion completed. You are now cleared to start the <strong>Interactive Activity</strong>!</span>
                                 </div>
                               ) : (
                                 <div className="bg-yellow-500/10 border border-yellow-500/25 text-yellow-500 p-3 rounded-xl text-xs flex items-center gap-2 animate-pulse">
@@ -3367,7 +5003,7 @@ export default function StudentCurriculum() {
                         )}
                       </div>
 
-                      {selectedTopic && selectedTopic.id !== 999999 && activeMaterials.length > 0 && (
+                      {selectedTopic && !isInteractiveTopic(selectedTopic.id) && activeMaterials.length > 0 && (
                         (() => {
                           const videoMaterial = getTopicVideoMaterial(selectedTopic);
                           const isVideoWatched = videoMaterial ? watchedVideos[videoMaterial.id] === true : true;

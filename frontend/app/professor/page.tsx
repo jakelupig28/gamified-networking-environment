@@ -4,6 +4,118 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 
+const getInteractiveModuleDetails = (mId: string | number, scores: any) => {
+  const ids = [
+    1782134355228, // Introduction to Networking
+    1782182808093, // Communicating Over The InternetPart 1
+    1782181968596, // Communicating Over The Internet Part 2
+    1782184909611, // Addressing IPv4
+    1782185665993, // Ethernet Part 1
+    1782186311891, // Ethernet Part 2
+    1782186928370, // Network Configuration
+    1782197552474, // Basic Router Configuration
+    1782198533015, // Routing Protocol Concepts
+    1782199846377, // Static Routing Part 1
+    1782200580841, // Static Routing Part 2
+    1782203599448  // Advance Static Routing
+  ];
+  const idx = ids.indexOf(Number(mId));
+  if (idx === -1) return { title: `Mod ${mId}`, total: 0, max: 10, details: "" };
+
+  const titles = [
+    "Intro to Net",
+    "Internet P1",
+    "Internet P2",
+    "Addressing IPv4",
+    "Ethernet P1",
+    "Ethernet P2",
+    "Net Config",
+    "Router Config",
+    "Routing Concepts",
+    "Static Route P1",
+    "Static Route P2",
+    "Adv Static Route"
+  ];
+
+  const t1 = scores.task1 !== undefined ? scores.task1 : (scores.vlsm || 0);
+  const t2 = scores.task2 !== undefined ? scores.task2 : (scores.anding || 0);
+  const t3 = scores.task3 !== undefined ? scores.task3 : (scores.ipv6 || 0);
+
+  const title = titles[idx];
+  let total = 0;
+  let max = 0;
+  let details = "";
+
+  switch (idx) {
+    case 0:
+      max = 10;
+      total = t1 + t2 + t3;
+      details = `T1: ${t1}/4, T2: ${t2}/3, T3: ${t3}/3`;
+      break;
+    case 1:
+      max = 6;
+      total = t1 + t2;
+      details = `T1: ${t1}/4, T2: ${t2}/2`;
+      break;
+    case 2:
+      max = 9;
+      total = t1 + t2;
+      details = `T1: ${t1}/4, T2: ${t2}/5`;
+      break;
+    case 3:
+      max = 16;
+      total = t1 + t2 + t3;
+      details = `T1: ${t1}/4, T2: ${t2}/9, T3: ${t3}/3`;
+      break;
+    case 4:
+      max = 4;
+      total = t1 + t2;
+      details = `T1: ${t1}/2, T2: ${t2}/2`;
+      break;
+    case 5:
+      max = 8;
+      total = t1 + t2;
+      details = `T1: ${t1}/5, T2: ${t2}/3`;
+      break;
+    case 6:
+      max = 11;
+      total = t1 + t2 + t3;
+      details = `T1: ${t1}/4, T2: ${t2}/4, T3: ${t3}/3`;
+      break;
+    case 7:
+      max = 11;
+      total = t1 + t2 + t3;
+      details = `T1: ${t1}/4, T2: ${t2}/4, T3: ${t3}/3`;
+      break;
+    case 8:
+      max = 5;
+      total = t1 + t2 + t3;
+      details = `T1: ${t1}/1, T2: ${t2}/2, T3: ${t3}/2`;
+      break;
+    case 9:
+      max = 6;
+      total = t1 + t2;
+      details = `T1: ${t1}/2, T2: ${t2}/4`;
+      break;
+    case 10:
+      max = 3;
+      total = t1 + t2;
+      details = `T1: ${t1}/2, T2: ${t2}/1`;
+      break;
+    case 11:
+      max = 5;
+      total = t1 + t2 + t3;
+      details = `T1: ${t1}/1, T2: ${t2}/1, T3: ${t3}/3`;
+      break;
+    default:
+      max = 10;
+      total = t1 + t2 + t3;
+      details = `T1: ${t1}, T2: ${t2}, T3: ${t3}`;
+  }
+
+  return { title, total, max, details };
+};
+
 export default function ProfessorDashboard() {
   const router = useRouter();
   const [isFirstLogin, setIsFirstLogin] = useState(false);
@@ -466,25 +578,24 @@ export default function ProfessorDashboard() {
                              {pretestDisplay}
                            </div>
                          </td>
-                         <td className="py-4 px-4 text-center text-brand-text">
-                           <div className="max-w-[250px] mx-auto text-[11px] font-mono leading-relaxed">
-                             {Object.keys(iScores).length > 0 ? (
-                               Object.entries(iScores).map(([mId, scores]: [string, any]) => (
-                                 <div key={mId} className="flex flex-col items-center border border-brand-border/30 rounded-lg p-1.5 bg-brand-bg/40 max-w-[240px] mx-auto gap-1">
-                                   <span className="text-[9px] font-bold text-brand-cyan uppercase">Subnetting Score</span>
-                                   <span className="font-bold text-xs">{(scores.vlsm || 0) + (scores.anding || 0) + (scores.ipv6 || 0)} / 20</span>
-                                   <div className="flex gap-2 text-[9px] text-brand-muted font-bold">
-                                     <span>VLSM: {scores.vlsm || 0}/8</span>
-                                     <span>AND: {scores.anding || 0}/9</span>
-                                     <span>IPv6: {scores.ipv6 || 0}/3</span>
-                                   </div>
-                                 </div>
-                               ))
-                             ) : (
-                               <span className="text-brand-muted italic">No activities submitted</span>
-                             )}
-                           </div>
-                         </td>
+                          <td className="py-4 px-4 text-center text-brand-text">
+                            <div className="max-w-[250px] mx-auto text-[11px] font-mono leading-relaxed flex flex-col gap-2">
+                              {Object.keys(iScores).length > 0 ? (
+                                Object.entries(iScores).map(([mId, scores]: [string, any]) => {
+                                  const details = getInteractiveModuleDetails(mId, scores);
+                                  return (
+                                    <div key={mId} className="flex flex-col items-center border border-brand-border/30 rounded-lg p-1.5 bg-brand-bg/40 max-w-[240px] mx-auto gap-1">
+                                      <span className="text-[9px] font-bold text-brand-cyan uppercase">{details.title}</span>
+                                      <span className="font-bold text-xs">{details.total} / {details.max}</span>
+                                      <span className="text-[9px] text-brand-muted font-bold">{details.details}</span>
+                                    </div>
+                                  );
+                                })
+                              ) : (
+                                <span className="text-brand-muted italic">No activities submitted</span>
+                              )}
+                            </div>
+                          </td>
                        </tr>
                      );
                    })}

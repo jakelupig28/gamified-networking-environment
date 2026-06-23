@@ -647,10 +647,21 @@ const ensureInteractiveActivity = (mods: Module[]): Module[] => {
     return mod;
   });
 };
+// Helper to filter out References topics in Student Preview
+const getPreviewTopics = (topicsList: Topic[]): Topic[] => {
+  return (topicsList || []).filter(t => {
+    const titleUpper = t.title.toUpperCase().trim();
+    return titleUpper !== 'REFERENCES' && titleUpper !== 'BIBLIOGRAPHY' && !/^REFERENCE\b/.test(titleUpper);
+  });
+};
 
 export default function ProfessorModules() {
   const [modules, setModules] = useState<Module[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Drag and Drop state for modules
+  const [draggedModuleId, setDraggedModuleId] = useState<number | null>(null);
+  const [dragOverModuleId, setDragOverModuleId] = useState<number | null>(null);
   
   // Search and selection
   const [searchTerm, setSearchTerm] = useState("");
@@ -663,6 +674,7 @@ export default function ProfessorModules() {
   const [previewSpecialItem, setPreviewSpecialItem] = useState<"announcements" | "self-introduction" | "subject-guide" | "pretest" | null>(null);
   const [previewExpandedTopics, setPreviewExpandedTopics] = useState<Record<number, boolean>>({});
   const [expandedSubjectOverview, setExpandedSubjectOverview] = useState(true);
+  const [previewExpandedModules, setPreviewExpandedModules] = useState<Record<number, boolean>>({});
 
   // Simulated Interactive preview comments/forum states
   const [previewSelfIntroPosts, setPreviewSelfIntroPosts] = useState<any[]>([
@@ -716,6 +728,8 @@ export default function ProfessorModules() {
   const [matContent, setMatContent] = useState("");
   const [matFileName, setMatFileName] = useState("");
   const [matFileSize, setMatFileSize] = useState("");
+  const [matTextStyle, setMatTextStyle] = useState<"normal" | "bold" | "italic" | "heading" | "quote" | "code">("normal");
+  const [matImageAlign, setMatImageAlign] = useState<"left" | "center" | "right">("center");
 
   // Editing states
   const [editingModuleId, setEditingModuleId] = useState<number | null>(null);
@@ -736,6 +750,17 @@ export default function ProfessorModules() {
   const [editingMaterialFileName, setEditingMaterialFileName] = useState("");
   const [editingMaterialFileSize, setEditingMaterialFileSize] = useState("");
   const [editingMaterialType, setEditingMaterialType] = useState<MaterialType>("text");
+
+  // Drag and drop material states
+  const [draggedMatInfo, setDraggedMatInfo] = useState<{ topicId: number; subtopicId?: number; index: number } | null>(null);
+  const [dragOverInfo, setDragOverInfo] = useState<{ topicId: number; subtopicId?: number; index: number } | null>(null);
+
+  // Rich text visual editor state
+  const [isVisualMode, setIsVisualMode] = useState(true);
+
+  // Editing topic/subtopic video states
+  const [editingTopicVideoUrl, setEditingTopicVideoUrl] = useState("");
+  const [editingSubtopicVideoUrl, setEditingSubtopicVideoUrl] = useState("");
 
   // Collapsible topics state
   const [expandedTopics, setExpandedTopics] = useState<Record<number, boolean>>({});
@@ -858,8 +883,13 @@ export default function ProfessorModules() {
   useEffect(() => {
     if (isPreviewMode && currentModuleId) {
       const activeModule = modules.find(m => m.id === currentModuleId);
-      if (activeModule && activeModule.topics.length > 0) {
-        setPreviewTopic(activeModule.topics[0]);
+      if (activeModule) {
+        const previewableTopics = getPreviewTopics(activeModule.topics);
+        if (previewableTopics.length > 0) {
+          setPreviewTopic(previewableTopics[0]);
+        } else {
+          setPreviewTopic(null);
+        }
         setPreviewSubtopic(null);
         setPreviewSpecialItem(null);
       } else {
@@ -869,6 +899,25 @@ export default function ProfessorModules() {
       }
     }
   }, [isPreviewMode, currentModuleId, modules]);
+
+  // Drag & drop drop handler for modules
+  const handleDropModule = async (e: React.DragEvent, targetId: number) => {
+    e.preventDefault();
+    if (draggedModuleId === null || draggedModuleId === targetId) return;
+
+    const draggedIdx = modules.findIndex(m => m.id === draggedModuleId);
+    const targetIdx = modules.findIndex(m => m.id === targetId);
+
+    if (draggedIdx === -1 || targetIdx === -1) return;
+
+    const updated = [...modules];
+    const [draggedItem] = updated.splice(draggedIdx, 1);
+    updated.splice(targetIdx, 0, draggedItem);
+
+    setDraggedModuleId(null);
+    setDragOverModuleId(null);
+    await updateAndPersistModules(updated);
+  };
 
   // Helper to persist modules state
   const updateAndPersistModules = async (updated: Module[]) => {
@@ -1107,12 +1156,17 @@ export default function ProfessorModules() {
 
   const deleteModule = (id: number, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm("Are you sure you want to delete this module and all its topics?")) return;
-    const updated = modules.filter(m => m.id !== id);
-    updateAndPersistModules(updated);
-    if (currentModuleId === id) {
-      setCurrentModuleId(updated.length > 0 ? updated[0].id : null);
-    }
+    showConfirm(
+      "Delete Module",
+      "Are you sure you want to delete this module and all its topics?",
+      () => {
+        const updated = modules.filter(m => m.id !== id);
+        updateAndPersistModules(updated);
+        if (currentModuleId === id) {
+          setCurrentModuleId(updated.length > 0 ? updated[0].id : null);
+        }
+      }
+    );
   };
 
   const startEditModule = (mod: Module, e: React.MouseEvent) => {
@@ -1150,34 +1204,72 @@ export default function ProfessorModules() {
   };
 
   const deleteTopic = (moduleId: number, topicId: number) => {
-    if (!confirm("Are you sure you want to delete this topic?")) return;
-    const updated = modules.map(mod =>
-      mod.id === moduleId
-        ? { ...mod, topics: mod.topics.filter(t => t.id !== topicId) }
-        : mod
+    showConfirm(
+      "Delete Topic",
+      "Are you sure you want to delete this topic?",
+      () => {
+        const updated = modules.map(mod =>
+          mod.id === moduleId
+            ? { ...mod, topics: mod.topics.filter(t => t.id !== topicId) }
+            : mod
+        );
+        updateAndPersistModules(updated);
+      }
     );
-    updateAndPersistModules(updated);
   };
 
   const startEditTopic = (topicId: number, title: string) => {
     setEditingTopicId(topicId);
     setEditingTopicTitle(title);
+    const topic = selectedModule?.topics.find(t => t.id === topicId);
+    const existingVideo = topic?.materials?.find(m => m.type === "video");
+    setEditingTopicVideoUrl(existingVideo ? existingVideo.content : "");
   };
 
   const saveEditTopic = (moduleId: number) => {
     if (!editingTopicTitle.trim() || !editingTopicId) return;
-    const updated = modules.map(mod =>
-      mod.id === moduleId
-        ? {
-            ...mod,
-            topics: mod.topics.map(t =>
-              t.id === editingTopicId ? { ...t, title: editingTopicTitle.trim() } : t
-            )
+    const updated = modules.map(mod => {
+      if (mod.id !== moduleId) return mod;
+      return {
+        ...mod,
+        topics: mod.topics.map(t => {
+          if (t.id !== editingTopicId) return t;
+
+          let updatedMaterials = [...(t.materials || [])];
+          const videoIdx = updatedMaterials.findIndex(m => m.type === "video");
+          const newVideoUrl = editingTopicVideoUrl.trim();
+
+          if (newVideoUrl) {
+            if (videoIdx >= 0) {
+              updatedMaterials[videoIdx] = {
+                ...updatedMaterials[videoIdx],
+                content: newVideoUrl
+              };
+            } else {
+              updatedMaterials.push({
+                id: Date.now() + Math.floor(Math.random() * 1000000),
+                type: "video",
+                title: "Watch Explanatory Video",
+                content: newVideoUrl
+              });
+            }
+          } else {
+            if (videoIdx >= 0) {
+              updatedMaterials.splice(videoIdx, 1);
+            }
           }
-        : mod
-    );
+
+          return {
+            ...t,
+            title: editingTopicTitle.trim(),
+            materials: updatedMaterials
+          };
+        })
+      };
+    });
     updateAndPersistModules(updated);
     setEditingTopicId(null);
+    setEditingTopicVideoUrl("");
   };
 
   const moveTopic = (moduleId: number, index: number, direction: "up" | "down") => {
@@ -1228,51 +1320,97 @@ export default function ProfessorModules() {
   };
 
   const deleteSubtopic = (moduleId: number, topicId: number, subtopicId: number) => {
-    if (!confirm("Are you sure you want to delete this subtopic?")) return;
-    const updated = modules.map(mod =>
-      mod.id === moduleId
-        ? {
-            ...mod,
-            topics: mod.topics.map(t =>
-              t.id === topicId
-                ? {
-                    ...t,
-                    subtopics: (t.subtopics || []).filter(s => s.id !== subtopicId)
-                  }
-                : t
-            )
-          }
-        : mod
+    showConfirm(
+      "Delete Subtopic",
+      "Are you sure you want to delete this subtopic?",
+      () => {
+        const updated = modules.map(mod =>
+          mod.id === moduleId
+            ? {
+                ...mod,
+                topics: mod.topics.map(t =>
+                  t.id === topicId
+                    ? {
+                        ...t,
+                        subtopics: (t.subtopics || []).filter(s => s.id !== subtopicId)
+                      }
+                    : t
+                )
+              }
+            : mod
+        );
+        updateAndPersistModules(updated);
+      }
     );
-    updateAndPersistModules(updated);
   };
 
   const startEditSubtopic = (subtopicId: number, title: string) => {
     setEditingSubtopicId(subtopicId);
     setEditingSubtopicTitle(title);
+    let existingVideo = "";
+    for (const mod of modules) {
+      for (const t of mod.topics) {
+        const sub = t.subtopics?.find(s => s.id === subtopicId);
+        if (sub) {
+          const videoMat = sub.materials?.find(m => m.type === "video");
+          if (videoMat) existingVideo = videoMat.content;
+          break;
+        }
+      }
+    }
+    setEditingSubtopicVideoUrl(existingVideo);
   };
 
   const saveEditSubtopic = (moduleId: number, topicId: number) => {
     if (!editingSubtopicTitle.trim() || !editingSubtopicId) return;
-    const updated = modules.map(mod =>
-      mod.id === moduleId
-        ? {
-            ...mod,
-            topics: mod.topics.map(t =>
-              t.id === topicId
-                ? {
-                    ...t,
-                    subtopics: (t.subtopics || []).map(s =>
-                      s.id === editingSubtopicId ? { ...s, title: editingSubtopicTitle.trim() } : s
-                    )
-                  }
-                : t
-            )
-          }
-        : mod
-    );
+    const updated = modules.map(mod => {
+      if (mod.id !== moduleId) return mod;
+      return {
+        ...mod,
+        topics: mod.topics.map(t => {
+          if (t.id !== topicId) return t;
+          return {
+            ...t,
+            subtopics: (t.subtopics || []).map(s => {
+              if (s.id !== editingSubtopicId) return s;
+
+              let updatedMaterials = [...(s.materials || [])];
+              const videoIdx = updatedMaterials.findIndex(m => m.type === "video");
+              const newVideoUrl = editingSubtopicVideoUrl.trim();
+
+              if (newVideoUrl) {
+                if (videoIdx >= 0) {
+                  updatedMaterials[videoIdx] = {
+                    ...updatedMaterials[videoIdx],
+                    content: newVideoUrl
+                  };
+                } else {
+                  updatedMaterials.push({
+                    id: Date.now() + Math.floor(Math.random() * 1000000),
+                    type: "video",
+                    title: "Watch Explanatory Video",
+                    content: newVideoUrl
+                  });
+                }
+              } else {
+                if (videoIdx >= 0) {
+                  updatedMaterials.splice(videoIdx, 1);
+                }
+              }
+
+              return {
+                ...s,
+                title: editingSubtopicTitle.trim(),
+                materials: updatedMaterials
+              };
+            })
+          };
+        })
+      };
+    });
     updateAndPersistModules(updated);
     setEditingSubtopicId(null);
+    setEditingSubtopicVideoUrl("");
   };
 
   const moveSubtopic = (moduleId: number, topicId: number, index: number, direction: "up" | "down") => {
@@ -1337,6 +1475,8 @@ export default function ProfessorModules() {
       type: materialType,
       title: finalTitle,
       content: matContent.trim(),
+      textStyle: materialType === "text" ? matTextStyle : undefined,
+      imageAlign: materialType === "image" ? matImageAlign : undefined,
       fileName: matFileName || undefined,
       fileSize: matFileSize || undefined
     };
@@ -1380,41 +1520,47 @@ export default function ProfessorModules() {
     setMatContent("");
     setMatFileName("");
     setMatFileSize("");
+    setMatTextStyle("normal");
+    setMatImageAlign("center");
   };
 
   const deleteMaterial = (moduleId: number, topicId: number, subtopicId: number | undefined, materialId: number) => {
-    if (!confirm("Are you sure you want to delete this learning material?")) return;
+    showConfirm(
+      "Delete Learning Material",
+      "Are you sure you want to delete this learning material?",
+      () => {
+        const updated = modules.map(mod => {
+          if (mod.id !== moduleId) return mod;
 
-    const updated = modules.map(mod => {
-      if (mod.id !== moduleId) return mod;
+          return {
+            ...mod,
+            topics: mod.topics.map(t => {
+              if (t.id !== topicId) return t;
 
-      return {
-        ...mod,
-        topics: mod.topics.map(t => {
-          if (t.id !== topicId) return t;
-
-          if (subtopicId !== undefined) {
-            return {
-              ...t,
-              subtopics: (t.subtopics || []).map(s => {
-                if (s.id !== subtopicId) return s;
+              if (subtopicId !== undefined) {
                 return {
-                  ...s,
-                  materials: (s.materials || []).filter(m => m.id !== materialId)
+                  ...t,
+                  subtopics: (t.subtopics || []).map(s => {
+                    if (s.id !== subtopicId) return s;
+                    return {
+                      ...s,
+                      materials: (s.materials || []).filter(m => m.id !== materialId)
+                    };
+                  })
                 };
-              })
-            };
-          } else {
-            return {
-              ...t,
-              materials: (t.materials || []).filter(m => m.id !== materialId)
-            };
-          }
-        })
-      };
-    });
+              } else {
+                return {
+                  ...t,
+                  materials: (t.materials || []).filter(m => m.id !== materialId)
+                };
+              }
+            })
+          };
+        });
 
-    updateAndPersistModules(updated);
+        updateAndPersistModules(updated);
+      }
+    );
   };
 
   const moveMaterial = (
@@ -1456,6 +1602,49 @@ export default function ProfessorModules() {
             const temp = list[index];
             list[index] = list[target];
             list[target] = temp;
+            return { ...t, materials: list };
+          }
+        })
+      };
+    });
+
+    updateAndPersistModules(updated);
+  };
+
+  const reorderMaterial = (
+    moduleId: number,
+    topicId: number,
+    subtopicId: number | undefined,
+    sourceIndex: number,
+    destIndex: number
+  ) => {
+    if (sourceIndex === destIndex) return;
+    const updated = modules.map(mod => {
+      if (mod.id !== moduleId) return mod;
+
+      return {
+        ...mod,
+        topics: mod.topics.map(t => {
+          if (t.id !== topicId) return t;
+
+          if (subtopicId !== undefined) {
+            // Reorder inside subtopic
+            return {
+              ...t,
+              subtopics: (t.subtopics || []).map(s => {
+                if (s.id !== subtopicId || !s.materials) return s;
+                const list = [...s.materials];
+                const [removed] = list.splice(sourceIndex, 1);
+                list.splice(destIndex, 0, removed);
+                return { ...s, materials: list };
+              })
+            };
+          } else {
+            // Reorder inside topic
+            if (!t.materials) return t;
+            const list = [...t.materials];
+            const [removed] = list.splice(sourceIndex, 1);
+            list.splice(destIndex, 0, removed);
             return { ...t, materials: list };
           }
         })
@@ -1554,10 +1743,85 @@ export default function ProfessorModules() {
   };
 
   // --- Material Formatting & Editing Helpers ---
-  const insertFormatTag = (textareaId: string, tagStart: string, tagEnd: string, isEditing: boolean) => {
-    const textarea = document.getElementById(textareaId) as HTMLTextAreaElement;
-    if (!textarea) return;
+  const wrapSelectionInSpan = (el: HTMLElement, styleStr: string) => {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return;
+    const range = selection.getRangeAt(0);
+    
+    if (!el.contains(range.commonAncestorContainer)) return;
+    
+    const span = document.createElement('span');
+    span.setAttribute('style', styleStr);
+    
+    try {
+      span.appendChild(range.extractContents());
+      range.insertNode(span);
+      selection.removeAllRanges();
+      const newRange = document.createRange();
+      newRange.selectNodeContents(span);
+      selection.addRange(newRange);
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
+  const toggleEditorMode = (elementId: string, isEditing: boolean) => {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+
+    if (isVisualMode) {
+      const currentHtml = el.innerHTML;
+      if (isEditing) {
+        setEditingMaterialContent(currentHtml);
+      } else {
+        setMatContent(currentHtml);
+      }
+      setIsVisualMode(false);
+    } else {
+      const currentHtml = (el as HTMLTextAreaElement).value;
+      if (isEditing) {
+        setEditingMaterialContent(currentHtml);
+      } else {
+        setMatContent(currentHtml);
+      }
+      setIsVisualMode(true);
+    }
+  };
+
+  const insertFormatTag = (textareaId: string, tagStart: string, tagEnd: string, isEditing: boolean) => {
+    const el = document.getElementById(textareaId);
+    if (!el) return;
+
+    if (isVisualMode && el.getAttribute('contenteditable') === 'true') {
+      el.focus();
+      if (tagStart === "<strong>") {
+        document.execCommand('bold', false);
+      } else if (tagStart === "<em>") {
+        document.execCommand('italic', false);
+      } else if (tagStart === "<u>") {
+        document.execCommand('underline', false);
+      } else if (tagStart.includes("background-color")) {
+        document.execCommand('hiliteColor', false, 'rgba(34, 211, 238, 0.25)');
+      } else if (tagStart.includes("font-family")) {
+        const font = tagStart.match(/font-family:\s*'([^;"]+)'/)?.[1] || tagStart.match(/font-family:\s*([^;"]+)/)?.[1];
+        if (font) document.execCommand('fontName', false, font);
+      } else if (tagStart.includes("font-size")) {
+        const size = tagStart.match(/font-size:\s*([^;"]+)/)?.[1];
+        if (size) wrapSelectionInSpan(el, `font-size: ${size};`);
+      } else if (tagStart.includes("monospace")) {
+        wrapSelectionInSpan(el, `font-family: monospace; background-color: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255, 255, 255, 0.2); padding: 2px 6px; border-radius: 4px; color: #4ade80; display: inline-block;`);
+      }
+
+      const content = el.innerHTML;
+      if (isEditing) {
+        setEditingMaterialContent(content);
+      } else {
+        setMatContent(content);
+      }
+      return;
+    }
+
+    const textarea = el as HTMLTextAreaElement;
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
     const text = textarea.value;
@@ -1637,6 +1901,14 @@ export default function ProfessorModules() {
           defaultValue=""
         >
           <option value="" disabled>Font Family</option>
+          <option value="Arial, sans-serif">Arial</option>
+          <option value="Helvetica, sans-serif">Helvetica</option>
+          <option value="'Times New Roman', serif">Times New Roman</option>
+          <option value="Georgia, serif">Georgia</option>
+          <option value="'Courier New', monospace">Courier New</option>
+          <option value="Verdana, sans-serif">Verdana</option>
+          <option value="Tahoma, sans-serif">Tahoma</option>
+          <option value="'Trebuchet MS', sans-serif">Trebuchet MS</option>
           <option value="'Inter', sans-serif">Inter</option>
           <option value="'Outfit', sans-serif">Outfit</option>
           <option value="'Playfair Display', serif">Playfair Display</option>
@@ -1655,10 +1927,14 @@ export default function ProfessorModules() {
           defaultValue=""
         >
           <option value="" disabled>Font Size</option>
-          <option value="11px">Small</option>
-          <option value="14px">Medium</option>
-          <option value="18px">Large</option>
-          <option value="24px">Extra Large</option>
+          <option value="12px">12px</option>
+          <option value="14px">14px</option>
+          <option value="16px">16px</option>
+          <option value="18px">18px</option>
+          <option value="20px">20px</option>
+          <option value="24px">24px</option>
+          <option value="28px">28px</option>
+          <option value="32px">32px</option>
         </select>
       </div>
     );
@@ -1797,10 +2073,6 @@ export default function ProfessorModules() {
   // Statistics calculations
   const totalModules = modules.length;
   const totalTopics = modules.reduce((sum, m) => sum + m.topics.length, 0);
-  const totalSubtopics = modules.reduce(
-    (sum, m) => sum + m.topics.reduce((subSum, t) => subSum + (t.subtopics?.length || 0), 0),
-    0
-  );
   const totalResources = modules.reduce(
     (sum, m) =>
       sum +
@@ -2022,7 +2294,7 @@ export default function ProfessorModules() {
         </header>
 
         {/* Statistics Panels */}
-        <section className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <section className="grid grid-cols-3 gap-4 mb-8">
           <div className="bg-brand-card border border-brand-border/40 rounded-xl p-4 flex items-center justify-between shadow-sm">
             <div>
               <div className="text-[10px] font-bold uppercase tracking-wider text-brand-muted">Modules</div>
@@ -2039,15 +2311,6 @@ export default function ProfessorModules() {
             </div>
             <div className="p-2.5 bg-brand-cyan/10 rounded-lg text-brand-cyan">
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>
-            </div>
-          </div>
-          <div className="bg-brand-card border border-brand-border/40 rounded-xl p-4 flex items-center justify-between shadow-sm">
-            <div>
-              <div className="text-[10px] font-bold uppercase tracking-wider text-brand-muted">Subtopics</div>
-              <div className="text-2xl font-bold mt-1">{totalSubtopics}</div>
-            </div>
-            <div className="p-2.5 bg-brand-cyan/10 rounded-lg text-brand-cyan">
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9Z"/><path d="M15 3v6h6"/><path d="m9 12 2 2 4-4"/></svg>
             </div>
           </div>
           <div className="bg-brand-card border border-brand-border/40 rounded-xl p-4 flex items-center justify-between shadow-sm">
@@ -2069,7 +2332,7 @@ export default function ProfessorModules() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
             
             {/* LEFT PANE: Modules Manager */}
-            <div className="lg:col-span-1 bg-brand-card border border-brand-border rounded-xl p-5 shadow-lg flex flex-col gap-4">
+            <div className="lg:col-span-1 bg-brand-card border border-brand-border rounded-xl p-5 shadow-lg flex flex-col gap-4 min-w-0">
               <div>
                 <h3 className="font-bold text-lg text-brand-text mb-1">Create Module</h3>
                 <p className="text-xs text-brand-muted">Add a new high-level chapter to your class.</p>
@@ -2139,7 +2402,7 @@ export default function ProfessorModules() {
                   )}
                 </div>
 
-                <div className="flex flex-col gap-2 max-h-[360px] overflow-y-auto pr-1">
+                <div className="flex flex-col gap-2">
                   {filteredModules.length === 0 ? (
                     <div className="text-center text-xs text-brand-muted py-6">
                       No modules found. Create one above!
@@ -2148,14 +2411,34 @@ export default function ProfessorModules() {
                     filteredModules.map((mod) => (
                       <div
                         key={mod.id}
+                        draggable={editingModuleId !== mod.id}
+                        onDragStart={(e) => {
+                          setDraggedModuleId(mod.id);
+                          e.dataTransfer.effectAllowed = "move";
+                          e.dataTransfer.setData("text/plain", String(mod.id));
+                        }}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          if (draggedModuleId !== null && draggedModuleId !== mod.id) {
+                            setDragOverModuleId(mod.id);
+                          }
+                        }}
+                        onDragLeave={() => setDragOverModuleId(null)}
+                        onDragEnd={() => {
+                          setDraggedModuleId(null);
+                          setDragOverModuleId(null);
+                        }}
+                        onDrop={(e) => handleDropModule(e, mod.id)}
                         onClick={() => {
                           setCurrentModuleId(mod.id);
                           setAddingMaterialTo(null);
                         }}
-                        className={`group relative p-3 rounded-lg border cursor-pointer flex flex-col gap-1 transition-all ${
-                          currentModuleId === mod.id
-                            ? "bg-brand-cyan/10 border-brand-cyan text-brand-text shadow-sm"
-                            : "bg-brand-card border-brand-border hover:bg-brand-bg/40 hover:border-brand-border-var"
+                        className={`group relative p-3 rounded-lg border cursor-grab active:cursor-grabbing flex flex-col gap-1 transition-all duration-200 ${
+                          dragOverModuleId === mod.id
+                            ? "border-brand-cyan bg-brand-cyan/25 scale-[1.02] shadow-lg shadow-brand-cyan/10"
+                            : currentModuleId === mod.id
+                              ? "bg-brand-cyan/10 border-brand-cyan text-brand-text shadow-sm"
+                              : "bg-brand-card border-brand-border hover:bg-brand-bg/40 hover:border-brand-border-var"
                         }`}
                       >
                         {editingModuleId === mod.id ? (
@@ -2198,14 +2481,6 @@ export default function ProfessorModules() {
                             </div>
                             <div className="text-[10px] text-brand-muted flex items-center gap-2 mt-1">
                               <span>{mod.topics.length} topics</span>
-                              <span>•</span>
-                              <span>
-                                {mod.topics.reduce(
-                                  (sum, t) => sum + (t.subtopics?.length || 0),
-                                  0
-                                )}{" "}
-                                subtopics
-                              </span>
                             </div>
 
                             {/* Actions Overlay */}
@@ -2235,20 +2510,20 @@ export default function ProfessorModules() {
             </div>
 
             {/* RIGHT PANE: Selected Module Detail Panel */}
-            <div className="lg:col-span-2 bg-brand-card border border-brand-border rounded-xl p-6 shadow-lg">
+            <div className="lg:col-span-2 bg-brand-card border border-brand-border rounded-xl p-6 shadow-lg min-w-0">
               {selectedModule ? (
                 <div>
                   
                   {/* Workspace Header with Builder/Preview toggle */}
-                  <div className="border-b border-brand-border/40 pb-4 mb-5 flex flex-col md:flex-row md:items-center justify-between gap-3">
-                    <div>
+                  <div className="border-b border-brand-border/40 pb-4 mb-5 flex flex-col md:flex-row md:items-center justify-between gap-3 flex-wrap">
+                    <div className="min-w-0 flex-grow">
                       <span className="text-[10px] text-brand-cyan uppercase tracking-wider font-semibold">
                         {isPreviewMode ? "Curriculum Preview Sim" : "Curriculum Builder Workspace"}
                       </span>
-                      <h2 className="text-xl font-bold mt-0.5">{selectedModule.title}</h2>
+                      <h2 className="text-xl font-bold mt-0.5 whitespace-normal break-words">{selectedModule.title}</h2>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap shrink-0 justify-end">
                       {/* Mode Toggle Button Group */}
                       <div className="flex bg-brand-bg border border-brand-border p-1 rounded-lg shrink-0">
                         <button
@@ -2442,25 +2717,39 @@ export default function ProfessorModules() {
                                     {/* Topic Name / Edit Mode */}
                                     <div className="flex-grow mr-4">
                                       {editingTopicId === topic.id ? (
-                                        <div className="flex items-center gap-2 max-w-md" onClick={(e) => e.stopPropagation()}>
-                                          <input
-                                            value={editingTopicTitle}
-                                            onChange={(e) => setEditingTopicTitle(e.target.value)}
-                                            className="bg-brand-bg border border-brand-cyan rounded-lg px-2 py-1 text-xs text-brand-text flex-grow focus:outline-none"
-                                            autoFocus
-                                          />
-                                          <button
-                                            onClick={() => saveEditTopic(selectedModule.id)}
-                                            className="text-green-500 hover:text-green-400 p-1"
-                                          >
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
-                                          </button>
-                                          <button
-                                            onClick={() => setEditingTopicId(null)}
-                                            className="text-red-500 hover:text-red-400 p-1"
-                                          >
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                                          </button>
+                                        <div className="flex flex-col gap-2 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-[10px] font-bold text-brand-cyan uppercase shrink-0 min-w-[70px]">Title:</span>
+                                            <input
+                                              value={editingTopicTitle}
+                                              onChange={(e) => setEditingTopicTitle(e.target.value)}
+                                              className="bg-brand-bg border border-brand-border rounded-lg px-2 py-1 text-xs text-brand-text flex-grow focus:outline-none focus:border-brand-cyan"
+                                              autoFocus
+                                            />
+                                          </div>
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-[10px] font-bold text-brand-cyan uppercase shrink-0 min-w-[70px]">Video URL:</span>
+                                            <input
+                                              value={editingTopicVideoUrl}
+                                              onChange={(e) => setEditingTopicVideoUrl(e.target.value)}
+                                              placeholder="Paste YouTube Link (e.g., https://youtube.com/watch?v=...)"
+                                              className="bg-brand-bg border border-brand-border rounded-lg px-2 py-1 text-xs text-brand-text flex-grow focus:outline-none focus:border-brand-cyan placeholder-brand-muted/40"
+                                            />
+                                          </div>
+                                          <div className="flex justify-end gap-1.5 mt-0.5">
+                                            <button
+                                              onClick={() => saveEditTopic(selectedModule.id)}
+                                              className="px-2 py-1 bg-green-500/20 hover:bg-green-500/30 text-green-400 border border-green-500/30 text-[10px] rounded-lg transition-all font-bold flex items-center gap-1 cursor-pointer"
+                                            >
+                                              Save
+                                            </button>
+                                            <button
+                                              onClick={() => setEditingTopicId(null)}
+                                              className="px-2 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 text-[10px] rounded-lg transition-all font-bold cursor-pointer"
+                                            >
+                                              Cancel
+                                            </button>
+                                          </div>
                                         </div>
                                       ) : (
                                         <div
@@ -2603,15 +2892,44 @@ export default function ProfessorModules() {
                                             />
 
                                             {addingMaterialTo.materialType === "text" && (
-                                              <div className="flex flex-col">
+                                              <div className="flex flex-col animate-fadeIn">
                                                 {renderFormattingToolbar(`mat-textarea-new-${topic.id}`, false)}
-                                                <textarea
-                                                  id={`mat-textarea-new-${topic.id}`}
-                                                  value={matContent}
-                                                  onChange={(e) => setMatContent(e.target.value)}
-                                                  placeholder="Write your study text here..."
-                                                  className="bg-brand-bg border border-brand-border rounded-b-lg p-2 text-xs text-brand-text focus:outline-none focus:border-brand-cyan/70 placeholder-brand-muted/50 h-28 resize-y"
-                                                />
+                                                {isVisualMode ? (
+                                                  <div
+                                                    id={`mat-textarea-new-${topic.id}`}
+                                                    contentEditable
+                                                    dangerouslySetInnerHTML={{ __html: matContent }}
+                                                    onBlur={(e) => setMatContent(e.target.innerHTML)}
+                                                    data-placeholder="Write your study text here..."
+                                                    className="bg-brand-bg border border-brand-border rounded-b-lg p-3 text-xs text-brand-text focus:outline-none focus:border-brand-cyan/70 min-h-[112px] overflow-y-auto"
+                                                  />
+                                                ) : (
+                                                  <textarea
+                                                    id={`mat-textarea-new-${topic.id}`}
+                                                    value={matContent}
+                                                    onChange={(e) => setMatContent(e.target.value)}
+                                                    placeholder="Write your study text here..."
+                                                    className="bg-brand-bg border border-brand-border rounded-b-lg p-2 text-xs text-brand-text focus:outline-none focus:border-brand-cyan/70 placeholder-brand-muted/50 h-28 resize-y font-mono"
+                                                  />
+                                                )}
+                                                {/* STYLE selection inside text editing */}
+                                                <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                                                  <span className="text-[10px] text-brand-muted font-bold uppercase tracking-wider">STYLE:</span>
+                                                  {(["normal", "bold", "italic", "heading", "quote", "code"] as const).map((style) => (
+                                                    <button
+                                                      key={style}
+                                                      type="button"
+                                                      onClick={() => setMatTextStyle(style)}
+                                                      className={`px-2.5 py-1 rounded-lg text-[10px] capitalize border transition-all ${
+                                                        matTextStyle === style
+                                                          ? "bg-brand-cyan/25 border-brand-cyan text-brand-cyan font-bold shadow-sm shadow-brand-cyan/10"
+                                                          : "bg-brand-bg border-brand-border/40 text-brand-muted hover:text-brand-text hover:border-brand-border"
+                                                      }`}
+                                                    >
+                                                      {style}
+                                                    </button>
+                                                  ))}
+                                                </div>
                                               </div>
                                             )}
 
@@ -2625,22 +2943,52 @@ export default function ProfessorModules() {
                                             )}
 
                                             {(addingMaterialTo.materialType === "image" || addingMaterialTo.materialType === "file") && (
-                                              <div className="flex items-center gap-3">
-                                                <label className="text-xs font-bold text-brand-bg bg-brand-cyan hover:bg-brand-cyan-hover px-3 py-1.5 rounded-lg cursor-pointer transition-colors flex items-center gap-1">
-                                                  <span>Upload File</span>
-                                                  <input
-                                                    type="file"
-                                                    className="hidden"
-                                                    accept={addingMaterialTo.materialType === "image" ? "image/*" : "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
-                                                    onChange={(e) => handleMaterialFileUpload(e, addingMaterialTo.materialType as 'image' | 'file')}
-                                                  />
-                                                </label>
-                                                {matFileName ? (
-                                                  <span className="text-[10px] text-brand-text truncate">
-                                                    {matFileName} ({matFileSize})
-                                                  </span>
-                                                ) : (
-                                                  <span className="text-[10px] text-brand-muted">No file chosen.</span>
+                                              <div className="flex flex-col gap-2">
+                                                <div className="flex items-center gap-3">
+                                                  <label className="text-xs font-bold text-brand-bg bg-brand-cyan hover:bg-brand-cyan-hover px-3 py-1.5 rounded-lg cursor-pointer transition-colors flex items-center gap-1">
+                                                    <span>Upload File</span>
+                                                    <input
+                                                      type="file"
+                                                      className="hidden"
+                                                      accept={addingMaterialTo.materialType === "image" ? "image/*" : "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
+                                                      onChange={(e) => handleMaterialFileUpload(e, addingMaterialTo.materialType as 'image' | 'file')}
+                                                    />
+                                                  </label>
+                                                  {matFileName ? (
+                                                    <span className="text-[10px] text-brand-text truncate">
+                                                      {matFileName} ({matFileSize})
+                                                    </span>
+                                                  ) : (
+                                                    <span className="text-[10px] text-brand-muted">No file chosen.</span>
+                                                  )}
+                                                </div>
+                                                {addingMaterialTo.materialType === "image" && matContent && (
+                                                  <div className="mt-2.5 w-full max-w-[480px] border border-brand-border/30 rounded-lg p-1.5 bg-brand-bg/40 shadow-md shadow-black/25 animate-fadeIn">
+                                                    <img
+                                                      src={matContent}
+                                                      alt="Image Preview"
+                                                      className="w-full max-h-[280px] rounded object-contain mx-auto"
+                                                    />
+                                                  </div>
+                                                )}
+                                                {addingMaterialTo.materialType === "image" && (
+                                                  <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                                    <span className="text-[10px] text-brand-muted font-bold uppercase tracking-wider">ALIGN:</span>
+                                                    {(["left", "center", "right"] as const).map((align) => (
+                                                      <button
+                                                        key={align}
+                                                        type="button"
+                                                        onClick={() => setMatImageAlign(align)}
+                                                        className={`px-2.5 py-1 rounded-lg text-[10px] capitalize border transition-all ${
+                                                          matImageAlign === align
+                                                            ? "bg-brand-cyan/25 border-brand-cyan text-brand-cyan font-bold shadow-sm shadow-brand-cyan/10"
+                                                            : "bg-brand-bg/50 border-brand-border/40 text-brand-muted hover:text-brand-text hover:border-brand-border"
+                                                        }`}
+                                                      >
+                                                        {align}
+                                                      </button>
+                                                    ))}
+                                                  </div>
                                                 )}
                                               </div>
                                             )}
@@ -2689,15 +3037,44 @@ export default function ProfessorModules() {
                                                   />
 
                                                   {editingMaterialType === "text" && (
-                                                    <div className="flex flex-col">
+                                                    <div className="flex flex-col animate-fadeIn">
                                                       {renderFormattingToolbar(`mat-textarea-edit-${mat.id}`, true)}
-                                                      <textarea
-                                                        id={`mat-textarea-edit-${mat.id}`}
-                                                        value={editingMaterialContent}
-                                                        onChange={(e) => setEditingMaterialContent(e.target.value)}
-                                                        placeholder="Write your study text here..."
-                                                        className="bg-brand-bg border border-brand-border rounded-b-lg p-2 text-xs text-brand-text focus:outline-none focus:border-brand-cyan/70 placeholder-brand-muted/50 h-28 resize-y"
-                                                      />
+                                                      {isVisualMode ? (
+                                                        <div
+                                                          id={`mat-textarea-edit-${mat.id}`}
+                                                          contentEditable
+                                                          dangerouslySetInnerHTML={{ __html: editingMaterialContent }}
+                                                          onBlur={(e) => setEditingMaterialContent(e.target.innerHTML)}
+                                                          data-placeholder="Write your study text here..."
+                                                          className="bg-brand-bg border border-brand-border rounded-b-lg p-3 text-xs text-brand-text focus:outline-none focus:border-brand-cyan/70 min-h-[112px] overflow-y-auto"
+                                                        />
+                                                      ) : (
+                                                        <textarea
+                                                          id={`mat-textarea-edit-${mat.id}`}
+                                                          value={editingMaterialContent}
+                                                          onChange={(e) => setEditingMaterialContent(e.target.value)}
+                                                          placeholder="Write your study text here..."
+                                                          className="bg-brand-bg border border-brand-border rounded-b-lg p-2 text-xs text-brand-text focus:outline-none focus:border-brand-cyan/70 placeholder-brand-muted/50 h-28 resize-y font-mono"
+                                                        />
+                                                      )}
+                                                      {/* STYLE selection inside editing */}
+                                                      <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                                                        <span className="text-[10px] text-brand-muted font-bold uppercase tracking-wider">STYLE:</span>
+                                                        {(["normal", "bold", "italic", "heading", "quote", "code"] as const).map((style) => (
+                                                          <button
+                                                            key={style}
+                                                            type="button"
+                                                            onClick={() => setEditingMaterialTextStyle(style)}
+                                                            className={`px-2.5 py-1 rounded-lg text-[10px] capitalize border transition-all ${
+                                                              editingMaterialTextStyle === style
+                                                                ? "bg-brand-cyan/25 border-brand-cyan text-brand-cyan font-bold shadow-sm shadow-brand-cyan/10"
+                                                                : "bg-brand-bg/50 border-brand-border/40 text-brand-muted hover:text-brand-text hover:border-brand-border"
+                                                            }`}
+                                                          >
+                                                            {style}
+                                                          </button>
+                                                        ))}
+                                                      </div>
                                                     </div>
                                                   )}
 
@@ -2711,24 +3088,54 @@ export default function ProfessorModules() {
                                                   )}
 
                                                   {(editingMaterialType === "image" || editingMaterialType === "file") && (
-                                                    <div className="flex items-center gap-3">
-                                                      <label className="text-xs font-bold text-brand-bg bg-brand-cyan hover:bg-brand-cyan-hover px-3 py-1.5 rounded-lg cursor-pointer transition-colors flex items-center gap-1">
-                                                        <span>Upload New File</span>
-                                                        <input
-                                                          type="file"
-                                                          className="hidden"
-                                                          accept={editingMaterialType === "image" ? "image/*" : "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
-                                                          onChange={(e) => handleEditMaterialFileUpload(e, editingMaterialType as 'image' | 'file')}
-                                                        />
-                                                      </label>
-                                                      {editingMaterialFileName ? (
-                                                        <span className="text-[10px] text-brand-text truncate">
-                                                          {editingMaterialFileName} ({editingMaterialFileSize})
-                                                        </span>
-                                                      ) : (
-                                                        <span className="text-[10px] text-brand-muted font-mono max-w-[200px] truncate">
-                                                          {editingMaterialContent.startsWith("data:") ? "Existing base64 resource" : editingMaterialContent}
-                                                        </span>
+                                                    <div className="flex flex-col gap-2">
+                                                      <div className="flex items-center gap-3">
+                                                        <label className="text-xs font-bold text-brand-bg bg-brand-cyan hover:bg-brand-cyan-hover px-3 py-1.5 rounded-lg cursor-pointer transition-colors flex items-center gap-1">
+                                                          <span>Upload New File</span>
+                                                          <input
+                                                            type="file"
+                                                            className="hidden"
+                                                            accept={editingMaterialType === "image" ? "image/*" : "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
+                                                            onChange={(e) => handleEditMaterialFileUpload(e, editingMaterialType as 'image' | 'file')}
+                                                          />
+                                                        </label>
+                                                        {editingMaterialFileName ? (
+                                                          <span className="text-[10px] text-brand-text truncate">
+                                                            {editingMaterialFileName} ({editingMaterialFileSize})
+                                                          </span>
+                                                        ) : (
+                                                          <span className="text-[10px] text-brand-muted font-mono max-w-[200px] truncate">
+                                                            {editingMaterialContent.startsWith("data:") ? "Existing base64 resource" : editingMaterialContent}
+                                                          </span>
+                                                        )}
+                                                      </div>
+                                                      {editingMaterialType === "image" && editingMaterialContent && (
+                                                        <div className="mt-2.5 w-full max-w-[480px] border border-brand-border/30 rounded-lg p-1.5 bg-brand-bg/40 shadow-md shadow-black/25 animate-fadeIn">
+                                                          <img
+                                                            src={editingMaterialContent}
+                                                            alt="Image Preview"
+                                                            className="w-full max-h-[280px] rounded object-contain mx-auto"
+                                                          />
+                                                        </div>
+                                                      )}
+                                                      {editingMaterialType === "image" && (
+                                                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                                          <span className="text-[10px] text-brand-muted font-bold uppercase tracking-wider">ALIGN:</span>
+                                                          {(["left", "center", "right"] as const).map((align) => (
+                                                            <button
+                                                              key={align}
+                                                              type="button"
+                                                              onClick={() => setEditingMaterialImageAlign(align)}
+                                                              className={`px-2.5 py-1 rounded-lg text-[10px] capitalize border transition-all ${
+                                                                editingMaterialImageAlign === align
+                                                                  ? "bg-brand-cyan/25 border-brand-cyan text-brand-cyan font-bold shadow-sm shadow-brand-cyan/10"
+                                                                  : "bg-brand-bg/50 border-brand-border/40 text-brand-muted hover:text-brand-text hover:border-brand-border"
+                                                              }`}
+                                                            >
+                                                              {align}
+                                                            </button>
+                                                          ))}
+                                                        </div>
                                                       )}
                                                     </div>
                                                   )}
@@ -2748,10 +3155,45 @@ export default function ProfessorModules() {
                                               ) : (
                                                 <div
                                                   key={mat.id}
-                                                  className="flex flex-col gap-2 bg-brand-card/40 border border-brand-border/30 rounded-lg p-3 hover:border-brand-border transition-colors animate-fadeIn"
+                                                  draggable
+                                                  onDragStart={(e) => {
+                                                    setDraggedMatInfo({ topicId: topic.id, index: matIdx });
+                                                    e.dataTransfer.effectAllowed = "move";
+                                                    e.dataTransfer.setData("text/plain", matIdx.toString());
+                                                  }}
+                                                  onDragEnd={() => {
+                                                    setDraggedMatInfo(null);
+                                                    setDragOverInfo(null);
+                                                  }}
+                                                  onDragOver={(e) => {
+                                                    e.preventDefault();
+                                                  }}
+                                                  onDragEnter={() => {
+                                                    if (draggedMatInfo && draggedMatInfo.topicId === topic.id && draggedMatInfo.subtopicId === undefined) {
+                                                      setDragOverInfo({ topicId: topic.id, index: matIdx });
+                                                    }
+                                                  }}
+                                                  onDrop={() => {
+                                                    if (draggedMatInfo && draggedMatInfo.topicId === topic.id && draggedMatInfo.subtopicId === undefined) {
+                                                      reorderMaterial(selectedModule.id, topic.id, undefined, draggedMatInfo.index, matIdx);
+                                                    }
+                                                    setDraggedMatInfo(null);
+                                                    setDragOverInfo(null);
+                                                  }}
+                                                  className={`flex flex-col gap-2 bg-brand-card/40 border rounded-lg p-3 hover:border-brand-border transition-all duration-200 animate-fadeIn cursor-grab active:cursor-grabbing ${
+                                                    draggedMatInfo?.topicId === topic.id && draggedMatInfo?.subtopicId === undefined && draggedMatInfo?.index === matIdx
+                                                      ? "opacity-30 border-dashed border-brand-cyan/50 bg-brand-bg/50 scale-[0.98]"
+                                                      : dragOverInfo?.topicId === topic.id && dragOverInfo?.subtopicId === undefined && dragOverInfo?.index === matIdx
+                                                      ? "border-brand-cyan bg-brand-cyan/5 scale-[1.01] shadow-md shadow-brand-cyan/5"
+                                                      : "border-brand-border/30"
+                                                  }`}
                                                 >
                                                   <div className="flex items-center justify-between w-full">
                                                     <div className="flex items-center gap-2.5 truncate mr-4">
+                                                      {/* Drag Handle grip */}
+                                                      <div className="text-brand-muted/50 hover:text-brand-cyan/80 cursor-grab active:cursor-grabbing p-0.5 shrink-0 transition-colors">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg>
+                                                      </div>
                                                       {/* Material Type Icon */}
                                                       {mat.type === "text" && (
                                                         <span className="text-brand-cyan" title="Reading Sheet">
@@ -2819,45 +3261,6 @@ export default function ProfessorModules() {
                                                       </button>
                                                     </div>
                                                   </div>
-
-                                                  {/* Style / Position adjustments */}
-                                                  {mat.type === "text" && (
-                                                    <div className="flex items-center gap-1.5 mt-1 border-t border-brand-border/10 pt-2 flex-wrap" onClick={(e) => e.stopPropagation()}>
-                                                      <span className="text-[9px] text-brand-muted font-bold uppercase tracking-wider">Style:</span>
-                                                      {(["normal", "bold", "italic", "heading", "quote", "code"] as const).map((style) => (
-                                                        <button
-                                                          key={style}
-                                                          onClick={() => updateMaterialTextStyle(selectedModule.id, topic.id, undefined, mat.id, style)}
-                                                          className={`px-2 py-0.5 rounded-md text-[9px] capitalize border transition-all ${
-                                                            (mat.textStyle || "normal") === style
-                                                              ? "bg-brand-cyan/25 border-brand-cyan text-brand-cyan font-bold shadow-sm shadow-brand-cyan/10"
-                                                              : "bg-brand-bg/50 border-brand-border/40 text-brand-muted hover:text-brand-text hover:border-brand-border"
-                                                          }`}
-                                                        >
-                                                          {style}
-                                                        </button>
-                                                      ))}
-                                                    </div>
-                                                  )}
-
-                                                  {mat.type === "image" && (
-                                                    <div className="flex items-center gap-1.5 mt-1 border-t border-brand-border/10 pt-2 flex-wrap" onClick={(e) => e.stopPropagation()}>
-                                                      <span className="text-[9px] text-brand-muted font-bold uppercase tracking-wider">Align:</span>
-                                                      {(["left", "center", "right"] as const).map((align) => (
-                                                        <button
-                                                          key={align}
-                                                          onClick={() => updateMaterialImageAlign(selectedModule.id, topic.id, undefined, mat.id, align)}
-                                                          className={`px-2 py-0.5 rounded-md text-[9px] capitalize border transition-all ${
-                                                            (mat.imageAlign || "center") === align
-                                                              ? "bg-brand-cyan/25 border-brand-cyan text-brand-cyan font-bold shadow-sm shadow-brand-cyan/10"
-                                                              : "bg-brand-bg/50 border-brand-border/40 text-brand-muted hover:text-brand-text hover:border-brand-border"
-                                                          }`}
-                                                        >
-                                                          {align}
-                                                        </button>
-                                                      ))}
-                                                    </div>
-                                                  )}
                                                 </div>
                                               )
                                             ))}
@@ -2880,25 +3283,39 @@ export default function ProfessorModules() {
                                             <div className="flex items-center justify-between">
                                               <div className="flex-grow mr-4">
                                                 {editingSubtopicId === sub.id ? (
-                                                  <div className="flex items-center gap-2 max-w-sm" onClick={(e) => e.stopPropagation()}>
-                                                    <input
-                                                      value={editingSubtopicTitle}
-                                                      onChange={(e) => setEditingSubtopicTitle(e.target.value)}
-                                                      className="bg-brand-bg border border-brand-cyan rounded-md px-2 py-0.5 text-xs text-brand-text flex-grow focus:outline-none"
-                                                      autoFocus
-                                                    />
-                                                    <button
-                                                      onClick={() => saveEditSubtopic(selectedModule.id, topic.id)}
-                                                      className="text-green-500 hover:text-green-400 p-0.5"
-                                                    >
-                                                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
-                                                    </button>
-                                                    <button
-                                                      onClick={() => setEditingSubtopicId(null)}
-                                                      className="text-red-500 hover:text-red-400 p-0.5"
-                                                    >
-                                                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                                                    </button>
+                                                  <div className="flex flex-col gap-2 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+                                                    <div className="flex items-center gap-2">
+                                                      <span className="text-[10px] font-bold text-brand-cyan uppercase shrink-0 min-w-[70px]">Title:</span>
+                                                      <input
+                                                        value={editingSubtopicTitle}
+                                                        onChange={(e) => setEditingSubtopicTitle(e.target.value)}
+                                                        className="bg-brand-bg border border-brand-border rounded-md px-2 py-0.5 text-xs text-brand-text flex-grow focus:outline-none focus:border-brand-cyan"
+                                                        autoFocus
+                                                      />
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                      <span className="text-[10px] font-bold text-brand-cyan uppercase shrink-0 min-w-[70px]">Video URL:</span>
+                                                      <input
+                                                        value={editingSubtopicVideoUrl}
+                                                        onChange={(e) => setEditingSubtopicVideoUrl(e.target.value)}
+                                                        placeholder="Paste YouTube Link (e.g., https://youtube.com/watch?v=...)"
+                                                        className="bg-brand-bg border border-brand-border rounded-md px-2 py-0.5 text-xs text-brand-text flex-grow focus:outline-none focus:border-brand-cyan placeholder-brand-muted/40"
+                                                      />
+                                                    </div>
+                                                    <div className="flex justify-end gap-1.5 mt-0.5">
+                                                      <button
+                                                        onClick={() => saveEditSubtopic(selectedModule.id, topic.id)}
+                                                        className="px-2 py-1 bg-green-500/20 hover:bg-green-500/30 text-green-400 border border-green-500/30 text-[10px] rounded-lg transition-all font-bold flex items-center gap-1 cursor-pointer"
+                                                      >
+                                                        Save
+                                                      </button>
+                                                      <button
+                                                        onClick={() => setEditingSubtopicId(null)}
+                                                        className="px-2 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 text-[10px] rounded-lg transition-all font-bold cursor-pointer"
+                                                      >
+                                                        Cancel
+                                                      </button>
+                                                    </div>
                                                   </div>
                                                 ) : (
                                                   <div
@@ -3033,15 +3450,44 @@ export default function ProfessorModules() {
                                                   />
 
                                                   {addingMaterialTo.materialType === "text" && (
-                                                    <div className="flex flex-col">
+                                                    <div className="flex flex-col animate-fadeIn">
                                                       {renderFormattingToolbar(`mat-textarea-new-sub-${sub.id}`, false)}
-                                                      <textarea
-                                                        id={`mat-textarea-new-sub-${sub.id}`}
-                                                        value={matContent}
-                                                        onChange={(e) => setMatContent(e.target.value)}
-                                                        placeholder="Write reading description..."
-                                                        className="bg-brand-bg border border-brand-border rounded-b-lg p-2 text-[11px] text-brand-text focus:outline-none focus:border-brand-cyan/70 placeholder-brand-muted/50 h-20 resize-y"
-                                                      />
+                                                      {isVisualMode ? (
+                                                        <div
+                                                          id={`mat-textarea-new-sub-${sub.id}`}
+                                                          contentEditable
+                                                          dangerouslySetInnerHTML={{ __html: matContent }}
+                                                          onBlur={(e) => setMatContent(e.target.innerHTML)}
+                                                          data-placeholder="Write reading description..."
+                                                          className="bg-brand-bg border border-brand-border rounded-b-lg p-3 text-[11px] text-brand-text focus:outline-none focus:border-brand-cyan/70 min-h-[80px] overflow-y-auto"
+                                                        />
+                                                      ) : (
+                                                        <textarea
+                                                          id={`mat-textarea-new-sub-${sub.id}`}
+                                                          value={matContent}
+                                                          onChange={(e) => setMatContent(e.target.value)}
+                                                          placeholder="Write reading description..."
+                                                          className="bg-brand-bg border border-brand-border rounded-b-lg p-2 text-[11px] text-brand-text focus:outline-none focus:border-brand-cyan/70 placeholder-brand-muted/50 h-20 resize-y font-mono"
+                                                        />
+                                                      )}
+                                                      {/* STYLE selection inside text editing */}
+                                                      <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                                                        <span className="text-[10px] text-brand-muted font-bold uppercase tracking-wider">STYLE:</span>
+                                                        {(["normal", "bold", "italic", "heading", "quote", "code"] as const).map((style) => (
+                                                          <button
+                                                            key={style}
+                                                            type="button"
+                                                            onClick={() => setMatTextStyle(style)}
+                                                            className={`px-2.5 py-1 rounded-lg text-[10px] capitalize border transition-all ${
+                                                              matTextStyle === style
+                                                                ? "bg-brand-cyan/25 border-brand-cyan text-brand-cyan font-bold shadow-sm shadow-brand-cyan/10"
+                                                                : "bg-brand-bg border-brand-border/40 text-brand-muted hover:text-brand-text hover:border-brand-border"
+                                                            }`}
+                                                          >
+                                                            {style}
+                                                          </button>
+                                                        ))}
+                                                      </div>
                                                     </div>
                                                   )}
 
@@ -3055,22 +3501,52 @@ export default function ProfessorModules() {
                                                   )}
 
                                                   {(addingMaterialTo.materialType === "image" || addingMaterialTo.materialType === "file") && (
-                                                    <div className="flex items-center gap-2">
-                                                      <label className="text-[10px] font-bold text-brand-bg bg-brand-cyan hover:bg-brand-cyan-hover px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors flex items-center gap-1 whitespace-nowrap">
-                                                        <span>Choose File</span>
-                                                        <input
-                                                          type="file"
-                                                          className="hidden"
-                                                          accept={addingMaterialTo.materialType === "image" ? "image/*" : "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
-                                                          onChange={(e) => handleMaterialFileUpload(e, addingMaterialTo.materialType as 'image' | 'file')}
-                                                        />
-                                                      </label>
-                                                      {matFileName ? (
-                                                        <span className="text-[9px] text-brand-text truncate max-w-[140px]">
-                                                          {matFileName}
-                                                        </span>
-                                                      ) : (
-                                                        <span className="text-[9px] text-brand-muted">No file.</span>
+                                                    <div className="flex flex-col gap-2">
+                                                      <div className="flex items-center gap-2">
+                                                        <label className="text-[10px] font-bold text-brand-bg bg-brand-cyan hover:bg-brand-cyan-hover px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors flex items-center gap-1 whitespace-nowrap">
+                                                          <span>Choose File</span>
+                                                          <input
+                                                            type="file"
+                                                            className="hidden"
+                                                            accept={addingMaterialTo.materialType === "image" ? "image/*" : "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
+                                                            onChange={(e) => handleMaterialFileUpload(e, addingMaterialTo.materialType as 'image' | 'file')}
+                                                          />
+                                                        </label>
+                                                        {matFileName ? (
+                                                          <span className="text-[9px] text-brand-text truncate max-w-[140px]">
+                                                            {matFileName}
+                                                          </span>
+                                                        ) : (
+                                                          <span className="text-[9px] text-brand-muted">No file.</span>
+                                                        )}
+                                                      </div>
+                                                      {addingMaterialTo.materialType === "image" && matContent && (
+                                                        <div className="mt-2.5 w-full max-w-[480px] border border-brand-border/30 rounded-lg p-1.5 bg-brand-bg/40 shadow-md shadow-black/25 animate-fadeIn">
+                                                          <img
+                                                            src={matContent}
+                                                            alt="Image Preview"
+                                                            className="w-full max-h-[280px] rounded object-contain mx-auto"
+                                                          />
+                                                        </div>
+                                                      )}
+                                                      {addingMaterialTo.materialType === "image" && (
+                                                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                                          <span className="text-[10px] text-brand-muted font-bold uppercase tracking-wider">ALIGN:</span>
+                                                          {(["left", "center", "right"] as const).map((align) => (
+                                                            <button
+                                                              key={align}
+                                                              type="button"
+                                                              onClick={() => setMatImageAlign(align)}
+                                                              className={`px-2.5 py-1 rounded-lg text-[10px] capitalize border transition-all ${
+                                                                matImageAlign === align
+                                                                  ? "bg-brand-cyan/25 border-brand-cyan text-brand-cyan font-bold shadow-sm shadow-brand-cyan/10"
+                                                                  : "bg-brand-bg border-brand-border/40 text-brand-muted hover:text-brand-text hover:border-brand-border"
+                                                              }`}
+                                                            >
+                                                              {align}
+                                                            </button>
+                                                          ))}
+                                                        </div>
                                                       )}
                                                     </div>
                                                   )}
@@ -3119,15 +3595,44 @@ export default function ProfessorModules() {
                                                         />
 
                                                         {editingMaterialType === "text" && (
-                                                          <div className="flex flex-col">
+                                                          <div className="flex flex-col animate-fadeIn">
                                                             {renderFormattingToolbar(`mat-textarea-edit-sub-${mat.id}`, true)}
-                                                            <textarea
-                                                              id={`mat-textarea-edit-sub-${mat.id}`}
-                                                              value={editingMaterialContent}
-                                                              onChange={(e) => setEditingMaterialContent(e.target.value)}
-                                                              placeholder="Write reading description..."
-                                                              className="bg-brand-bg border border-brand-border rounded-b-lg p-2 text-[11px] text-brand-text focus:outline-none focus:border-brand-cyan/70 placeholder-brand-muted/50 h-20 resize-y"
-                                                            />
+                                                            {isVisualMode ? (
+                                                              <div
+                                                                id={`mat-textarea-edit-sub-${mat.id}`}
+                                                                contentEditable
+                                                                dangerouslySetInnerHTML={{ __html: editingMaterialContent }}
+                                                                onBlur={(e) => setEditingMaterialContent(e.target.innerHTML)}
+                                                                data-placeholder="Write reading description..."
+                                                                className="bg-brand-bg border border-brand-border rounded-b-lg p-3 text-[11px] text-brand-text focus:outline-none focus:border-brand-cyan/70 min-h-[80px] overflow-y-auto"
+                                                              />
+                                                            ) : (
+                                                              <textarea
+                                                                id={`mat-textarea-edit-sub-${mat.id}`}
+                                                                value={editingMaterialContent}
+                                                                onChange={(e) => setEditingMaterialContent(e.target.value)}
+                                                                placeholder="Write reading description..."
+                                                                className="bg-brand-bg border border-brand-border rounded-b-lg p-2 text-[11px] text-brand-text focus:outline-none focus:border-brand-cyan/70 placeholder-brand-muted/50 h-20 resize-y font-mono"
+                                                              />
+                                                            )}
+                                                            {/* STYLE selection inside editing */}
+                                                            <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                                                              <span className="text-[10px] text-brand-muted font-bold uppercase tracking-wider">STYLE:</span>
+                                                              {(["normal", "bold", "italic", "heading", "quote", "code"] as const).map((style) => (
+                                                                <button
+                                                                  key={style}
+                                                                  type="button"
+                                                                  onClick={() => setEditingMaterialTextStyle(style)}
+                                                                  className={`px-2.5 py-1 rounded-lg text-[10px] capitalize border transition-all ${
+                                                                    editingMaterialTextStyle === style
+                                                                      ? "bg-brand-cyan/25 border-brand-cyan text-brand-cyan font-bold shadow-sm shadow-brand-cyan/10"
+                                                                      : "bg-brand-bg/50 border-brand-border/40 text-brand-muted hover:text-brand-text hover:border-brand-border"
+                                                                  }`}
+                                                                >
+                                                                  {style}
+                                                                </button>
+                                                              ))}
+                                                            </div>
                                                           </div>
                                                         )}
 
@@ -3141,24 +3646,54 @@ export default function ProfessorModules() {
                                                         )}
 
                                                         {(editingMaterialType === "image" || editingMaterialType === "file") && (
-                                                          <div className="flex items-center gap-2">
-                                                            <label className="text-[10px] font-bold text-brand-bg bg-brand-cyan hover:bg-brand-cyan-hover px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors flex items-center gap-1 whitespace-nowrap">
-                                                              <span>Upload New File</span>
-                                                              <input
-                                                                type="file"
-                                                                className="hidden"
-                                                                accept={editingMaterialType === "image" ? "image/*" : "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
-                                                                onChange={(e) => handleEditMaterialFileUpload(e, editingMaterialType as 'image' | 'file')}
-                                                              />
-                                                            </label>
-                                                            {editingMaterialFileName ? (
-                                                              <span className="text-[9px] text-brand-text truncate max-w-[140px]">
-                                                                {editingMaterialFileName}
-                                                              </span>
-                                                            ) : (
-                                                              <span className="text-[9px] text-brand-muted truncate max-w-[140px]">
-                                                                {editingMaterialContent.startsWith("data:") ? "Existing base64" : editingMaterialContent}
-                                                              </span>
+                                                          <div className="flex flex-col gap-2">
+                                                            <div className="flex items-center gap-2">
+                                                              <label className="text-[10px] font-bold text-brand-bg bg-brand-cyan hover:bg-brand-cyan-hover px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors flex items-center gap-1 whitespace-nowrap">
+                                                                <span>Upload New File</span>
+                                                                <input
+                                                                  type="file"
+                                                                  className="hidden"
+                                                                  accept={editingMaterialType === "image" ? "image/*" : "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
+                                                                  onChange={(e) => handleEditMaterialFileUpload(e, editingMaterialType as 'image' | 'file')}
+                                                                />
+                                                              </label>
+                                                              {editingMaterialFileName ? (
+                                                                <span className="text-[9px] text-brand-text truncate max-w-[140px]">
+                                                                  {editingMaterialFileName}
+                                                                </span>
+                                                              ) : (
+                                                                <span className="text-[9px] text-brand-muted truncate max-w-[140px]">
+                                                                  {editingMaterialContent.startsWith("data:") ? "Existing base64" : editingMaterialContent}
+                                                                </span>
+                                                              )}
+                                                            </div>
+                                                            {editingMaterialType === "image" && editingMaterialContent && (
+                                                              <div className="mt-2.5 w-full max-w-[480px] border border-brand-border/30 rounded-lg p-1.5 bg-brand-bg/40 shadow-md shadow-black/25 animate-fadeIn">
+                                                                <img
+                                                                  src={editingMaterialContent}
+                                                                  alt="Image Preview"
+                                                                  className="w-full max-h-[280px] rounded object-contain mx-auto"
+                                                                />
+                                                              </div>
+                                                            )}
+                                                            {editingMaterialType === "image" && (
+                                                              <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                                                <span className="text-[10px] text-brand-muted font-bold uppercase tracking-wider">ALIGN:</span>
+                                                                {(["left", "center", "right"] as const).map((align) => (
+                                                                  <button
+                                                                    key={align}
+                                                                    type="button"
+                                                                    onClick={() => setEditingMaterialImageAlign(align)}
+                                                                    className={`px-2.5 py-1 rounded-lg text-[10px] capitalize border transition-all ${
+                                                                      editingMaterialImageAlign === align
+                                                                        ? "bg-brand-cyan/25 border-brand-cyan text-brand-cyan font-bold shadow-sm shadow-brand-cyan/10"
+                                                                        : "bg-brand-bg/50 border-brand-border/40 text-brand-muted hover:text-brand-text hover:border-brand-border"
+                                                                    }`}
+                                                                  >
+                                                                    {align}
+                                                                  </button>
+                                                                ))}
+                                                              </div>
                                                             )}
                                                           </div>
                                                         )}
@@ -3178,12 +3713,49 @@ export default function ProfessorModules() {
                                                     ) : (
                                                       <div
                                                         key={mat.id}
-                                                        className="flex flex-col gap-1.5 bg-brand-bg/20 border border-brand-border/20 rounded p-2 hover:border-brand-border/40"
+                                                        draggable
+                                                        onDragStart={(e) => {
+                                                          setDraggedMatInfo({ topicId: topic.id, subtopicId: sub.id, index: matIdx });
+                                                          e.dataTransfer.effectAllowed = "move";
+                                                          e.dataTransfer.setData("text/plain", matIdx.toString());
+                                                        }}
+                                                        onDragEnd={() => {
+                                                          setDraggedMatInfo(null);
+                                                          setDragOverInfo(null);
+                                                        }}
+                                                        onDragOver={(e) => {
+                                                          e.preventDefault();
+                                                        }}
+                                                        onDragEnter={() => {
+                                                          if (draggedMatInfo && draggedMatInfo.topicId === topic.id && draggedMatInfo.subtopicId === sub.id) {
+                                                            setDragOverInfo({ topicId: topic.id, subtopicId: sub.id, index: matIdx });
+                                                          }
+                                                        }}
+                                                        onDrop={() => {
+                                                          if (draggedMatInfo && draggedMatInfo.topicId === topic.id && draggedMatInfo.subtopicId === sub.id) {
+                                                            reorderMaterial(selectedModule.id, topic.id, sub.id, draggedMatInfo.index, matIdx);
+                                                          }
+                                                          setDraggedMatInfo(null);
+                                                          setDragOverInfo(null);
+                                                        }}
+                                                        className={`flex flex-col gap-1.5 bg-brand-bg/20 border rounded p-2 hover:border-brand-border/40 transition-all duration-200 cursor-grab active:cursor-grabbing ${
+                                                          draggedMatInfo?.topicId === topic.id && draggedMatInfo?.subtopicId === sub.id && draggedMatInfo?.index === matIdx
+                                                            ? "opacity-30 border-dashed border-brand-cyan/50 bg-brand-bg/50 scale-[0.98]"
+                                                            : dragOverInfo?.topicId === topic.id && dragOverInfo?.subtopicId === sub.id && dragOverInfo?.index === matIdx
+                                                            ? "border-brand-cyan bg-brand-cyan/5 scale-[1.01] shadow-md shadow-brand-cyan/5"
+                                                            : "border-brand-border/20"
+                                                        }`}
                                                       >
                                                         <div className="flex items-center justify-between w-full">
-                                                          <span className="text-[11px] font-medium text-brand-text truncate mr-3">
-                                                            {mat.title} <span className="text-[9px] text-brand-muted font-normal font-mono">({mat.type})</span>
-                                                          </span>
+                                                          <div className="flex items-center gap-2 truncate mr-3">
+                                                            {/* Drag Handle grip */}
+                                                            <div className="text-brand-muted/50 hover:text-brand-cyan/80 cursor-grab active:cursor-grabbing p-0.5 shrink-0 transition-colors">
+                                                              <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg>
+                                                            </div>
+                                                            <span className="text-[11px] font-medium text-brand-text truncate">
+                                                              {mat.title} <span className="text-[9px] text-brand-muted font-normal font-mono">({mat.type})</span>
+                                                            </span>
+                                                          </div>
 
                                                           <div className="flex items-center gap-1 shrink-0">
                                                             {/* Reordering */}
@@ -3220,45 +3792,6 @@ export default function ProfessorModules() {
                                                             </button>
                                                           </div>
                                                         </div>
-
-                                                        {/* Style / Position adjustments */}
-                                                        {mat.type === "text" && (
-                                                          <div className="flex items-center gap-1.5 border-t border-brand-border/10 pt-1.5 flex-wrap" onClick={(e) => e.stopPropagation()}>
-                                                            <span className="text-[8px] text-brand-muted font-bold uppercase tracking-wider">Style:</span>
-                                                            {(["normal", "bold", "italic", "heading", "quote", "code"] as const).map((style) => (
-                                                              <button
-                                                                key={style}
-                                                                onClick={() => updateMaterialTextStyle(selectedModule.id, topic.id, sub.id, mat.id, style)}
-                                                                className={`px-1 py-0.5 rounded text-[8px] capitalize border transition-all ${
-                                                                  (mat.textStyle || "normal") === style
-                                                                    ? "bg-brand-cyan/20 border-brand-cyan text-brand-cyan font-bold"
-                                                                    : "bg-brand-bg/50 border-brand-border/40 text-brand-muted hover:text-brand-text hover:border-brand-border"
-                                                                }`}
-                                                              >
-                                                                {style}
-                                                              </button>
-                                                            ))}
-                                                          </div>
-                                                        )}
-
-                                                        {mat.type === "image" && (
-                                                          <div className="flex items-center gap-1.5 border-t border-brand-border/10 pt-1.5 flex-wrap" onClick={(e) => e.stopPropagation()}>
-                                                            <span className="text-[8px] text-brand-muted font-bold uppercase tracking-wider">Align:</span>
-                                                            {(["left", "center", "right"] as const).map((align) => (
-                                                              <button
-                                                                key={align}
-                                                                onClick={() => updateMaterialImageAlign(selectedModule.id, topic.id, sub.id, mat.id, align)}
-                                                                className={`px-1 py-0.5 rounded text-[8px] capitalize border transition-all ${
-                                                                  (mat.imageAlign || "center") === align
-                                                                    ? "bg-brand-cyan/20 border-brand-cyan text-brand-cyan font-bold"
-                                                                    : "bg-brand-bg/50 border-brand-border/40 text-brand-muted hover:text-brand-text hover:border-brand-border"
-                                                                }`}
-                                                              >
-                                                                {align}
-                                                              </button>
-                                                            ))}
-                                                          </div>
-                                                        )}
                                                       </div>
                                                     )
                                                   ))}
@@ -3308,9 +3841,9 @@ export default function ProfessorModules() {
                   ) : (
                     <>
                       {/* STUDENT PREVIEW MODE */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4 items-start">
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4 items-start">
                         {/* Simulated Left Navigation Tree */}
-                        <div className="md:col-span-1 bg-brand-bg/60 border border-brand-border rounded-xl p-3 flex flex-col gap-3 shadow-inner">
+                        <div className="lg:col-span-1 bg-brand-bg/60 border border-brand-border rounded-xl p-3 flex flex-col gap-3 shadow-inner min-w-0">
                           <span className="text-[9px] uppercase font-bold text-brand-cyan px-2.5 mb-1.5">
                             Outline Navigation
                           </span>
@@ -3398,111 +3931,153 @@ export default function ProfessorModules() {
                           </div>
 
                           {/* Module Topics Box container */}
-                          <div className="border border-brand-border/40 rounded-xl overflow-hidden">
-                            <div className="w-full px-3 py-2 bg-brand-bg/50 border-b border-brand-border/20 text-brand-text">
-                              <span className="text-[8px] uppercase tracking-wider font-semibold text-brand-cyan/70">Module Contents</span>
-                              <h4 className="text-xs font-bold mt-0.5 leading-tight">{selectedModule.title}</h4>
-                            </div>
-                            <div className="p-1.5 flex flex-col gap-1 bg-brand-card/30">
-                              {selectedModule.pretest && selectedModule.pretest.length > 0 && (
+                          {modules.map((mod) => {
+                            const isModExpanded = previewExpandedModules[mod.id] !== false;
+
+                            return (
+                              <div key={mod.id} className="border border-brand-border/40 rounded-xl overflow-hidden mb-3 last:mb-0">
+                                {/* Module Header Button */}
                                 <button
                                   onClick={() => {
-                                    setPreviewSpecialItem("pretest");
-                                    setPreviewTopic(null);
-                                    setPreviewSubtopic(null);
+                                    setPreviewExpandedModules(prev => ({ ...prev, [mod.id]: !isModExpanded }));
+                                    if (selectedModule?.id !== mod.id) {
+                                      const matchedMod = modules.find(m => m.id === mod.id);
+                                      if (matchedMod) {
+                                        setCurrentModuleId(mod.id);
+                                        setPreviewTopic(getPreviewTopics(matchedMod.topics)[0] || null);
+                                        setPreviewSubtopic(null);
+                                        setPreviewSpecialItem(null);
+                                      }
+                                    }
                                   }}
-                                  className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                                    previewSpecialItem === "pretest"
-                                      ? "bg-brand-cyan text-brand-bg font-bold shadow-sm"
-                                      : "text-brand-muted hover:text-brand-text hover:bg-brand-bg/40"
+                                  className={`w-full px-3 py-2.5 flex items-center justify-between text-left transition-colors border-b border-brand-border/20 hover:bg-brand-bg/85 ${
+                                    selectedModule?.id === mod.id && previewSpecialItem === null
+                                      ? "bg-brand-cyan/15 text-brand-cyan font-bold border-l-2 border-l-brand-cyan"
+                                      : "bg-brand-bg/50 text-brand-text"
                                   }`}
                                 >
-                                  <span>📝</span>
-                                  <span>Module Pre-test</span>
+                                  <div className="flex-grow min-w-0 pr-2">
+                                    <span className={`text-[8px] uppercase tracking-wider font-semibold ${selectedModule?.id === mod.id && previewSpecialItem === null ? "text-brand-cyan" : "text-brand-cyan/70"}`}>
+                                      Module
+                                    </span>
+                                    <h4 className="text-xs font-bold mt-0.5 whitespace-normal break-words leading-tight">{mod.title}</h4>
+                                  </div>
+                                  <span className="text-brand-muted shrink-0">
+                                    {isModExpanded ? (
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m18 15-6-6-6 6" /></svg>
+                                    ) : (
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+                                    )}
+                                  </span>
                                 </button>
-                              )}
 
-                              {selectedModule.topics.length === 0 ? (
-                                <div className="text-[10px] text-brand-muted/70 px-2.5 py-1 italic">
-                                  No topics outlined yet
-                                </div>
-                              ) : (
-                                selectedModule.topics.map((t) => {
-                                  const isTopicSelected = previewTopic?.id === t.id && !previewSubtopic && previewSpecialItem === null;
-                                  const hasSubtopics = t.subtopics && t.subtopics.length > 0;
-                                  const isExpanded = previewExpandedTopics[t.id] === true;
-                                  
-                                  return (
-                                    <div key={t.id} className="flex flex-col gap-1">
-                                      <div
-                                        className={`w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer transition-all ${
-                                          isTopicSelected
-                                            ? "bg-brand-cyan text-brand-bg font-bold shadow-sm"
-                                            : (previewTopic?.id === t.id && previewSpecialItem === null)
-                                              ? "bg-brand-cyan/10 text-brand-text font-semibold border border-brand-cyan/20"
-                                              : "text-brand-muted hover:text-brand-text hover:bg-brand-bg/40"
-                                        }`}
+                                {isModExpanded && (
+                                  <div className="p-1.5 flex flex-col gap-1 bg-brand-card/30">
+                                    {mod.pretest && mod.pretest.length > 0 && (
+                                      <button
                                         onClick={() => {
-                                          setPreviewTopic(t);
+                                          setCurrentModuleId(mod.id);
+                                          setPreviewSpecialItem("pretest");
+                                          setPreviewTopic(null);
                                           setPreviewSubtopic(null);
-                                          setPreviewSpecialItem(null);
-                                          if (hasSubtopics) {
-                                            setPreviewExpandedTopics(prev => ({ ...prev, [t.id]: true }));
-                                          }
                                         }}
+                                        className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                          previewSpecialItem === "pretest" && selectedModule?.id === mod.id
+                                            ? "bg-brand-cyan text-brand-bg font-bold shadow-sm"
+                                            : "text-brand-muted hover:text-brand-text hover:bg-brand-bg/40"
+                                        }`}
                                       >
-                                        <span className="text-xs truncate flex-grow">Topic: {t.title}</span>
-                                        {hasSubtopics && (
-                                          <button
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setPreviewExpandedTopics(prev => ({ ...prev, [t.id]: !prev[t.id] }));
-                                            }}
-                                            className={`p-0.5 shrink-0 ${isTopicSelected ? 'text-brand-bg hover:text-brand-bg/80' : 'text-brand-muted hover:text-brand-text'}`}
-                                          >
-                                            {isExpanded ? (
-                                              <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m18 15-6-6-6 6" /></svg>
-                                            ) : (
-                                              <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
-                                            )}
-                                          </button>
-                                        )}
+                                        <span>📝</span>
+                                        <span>Module Pre-test</span>
+                                      </button>
+                                    )}
+
+                                    {getPreviewTopics(mod.topics).length === 0 ? (
+                                      <div className="text-[10px] text-brand-muted/70 px-2.5 py-1 italic">
+                                        No topics outlined yet
                                       </div>
-                                      
-                                      {hasSubtopics && isExpanded && (
-                                        <div className="pl-3 border-l border-brand-border/40 ml-3 flex flex-col gap-1 py-0.5">
-                                          {t.subtopics!.map((sub) => {
-                                            const isSubSelected = previewSubtopic?.id === sub.id && previewSpecialItem === null;
-                                            return (
-                                              <button
-                                                key={sub.id}
-                                                onClick={() => {
-                                                  setPreviewTopic(t);
-                                                  setPreviewSubtopic(sub);
-                                                  setPreviewSpecialItem(null);
-                                                }}
-                                                className={`w-full text-left px-2 py-1 rounded text-[10px] truncate transition-colors ${
-                                                  isSubSelected
-                                                    ? "bg-brand-cyan text-brand-bg font-bold shadow-sm"
-                                                    : "text-brand-muted hover:text-brand-text hover:bg-brand-bg/20"
-                                                }`}
-                                              >
-                                                • {sub.title}
-                                              </button>
-                                            );
-                                          })}
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                })
-                              )}
-                            </div>
-                          </div>
+                                    ) : (
+                                      getPreviewTopics(mod.topics).map((t) => {
+                                        const isTopicSelected = previewTopic?.id === t.id && !previewSubtopic && previewSpecialItem === null && selectedModule?.id === mod.id;
+                                        const hasSubtopics = t.subtopics && t.subtopics.length > 0;
+                                        const isExpanded = previewExpandedTopics[t.id] === true;
+
+                                        return (
+                                          <div key={t.id} className="flex flex-col gap-1">
+                                            <div
+                                              className={`w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer transition-all ${
+                                                isTopicSelected
+                                                  ? "bg-brand-cyan text-brand-bg font-bold shadow-sm"
+                                                  : (previewTopic?.id === t.id && previewSpecialItem === null && selectedModule?.id === mod.id)
+                                                    ? "bg-brand-cyan/10 text-brand-text font-semibold border border-brand-cyan/20"
+                                                    : "text-brand-muted hover:text-brand-text hover:bg-brand-bg/40"
+                                              }`}
+                                              onClick={() => {
+                                                setCurrentModuleId(mod.id);
+                                                setPreviewTopic(t);
+                                                setPreviewSubtopic(null);
+                                                setPreviewSpecialItem(null);
+                                                if (hasSubtopics) {
+                                                  setPreviewExpandedTopics(prev => ({ ...prev, [t.id]: true }));
+                                                }
+                                              }}
+                                            >
+                                              <span className="text-xs truncate flex-grow">Topic: {t.title}</span>
+                                              {hasSubtopics && (
+                                                <button
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setPreviewExpandedTopics(prev => ({ ...prev, [t.id]: !prev[t.id] }));
+                                                  }}
+                                                  className={`p-0.5 shrink-0 ${isTopicSelected ? 'text-brand-bg hover:text-brand-bg/80' : 'text-brand-muted hover:text-brand-text'}`}
+                                                >
+                                                  {isExpanded ? (
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m18 15-6-6-6 6" /></svg>
+                                                  ) : (
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+                                                  )}
+                                                </button>
+                                              )}
+                                            </div>
+
+                                            {hasSubtopics && isExpanded && (
+                                              <div className="pl-3 border-l border-brand-border/40 ml-3 flex flex-col gap-1 py-0.5">
+                                                {t.subtopics!.map((sub) => {
+                                                  const isSubSelected = previewSubtopic?.id === sub.id && previewSpecialItem === null && selectedModule?.id === mod.id;
+                                                  return (
+                                                    <button
+                                                      key={sub.id}
+                                                      onClick={() => {
+                                                        setCurrentModuleId(mod.id);
+                                                        setPreviewTopic(t);
+                                                        setPreviewSubtopic(sub);
+                                                        setPreviewSpecialItem(null);
+                                                      }}
+                                                      className={`w-full text-left px-2.5 py-1.5 rounded text-[10px] truncate transition-colors ${
+                                                        isSubSelected
+                                                          ? "bg-brand-cyan text-brand-bg font-bold shadow-sm"
+                                                          : "text-brand-muted hover:text-brand-text hover:bg-brand-bg/25"
+                                                      }`}
+                                                    >
+                                                      • {sub.title}
+                                                    </button>
+                                                  );
+                                                })}
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
 
                         {/* Simulated Right Content Frame */}
-                        <div className="md:col-span-2 bg-brand-bg/20 border border-brand-border rounded-xl p-4 min-h-[320px] flex flex-col shadow-sm">
+                        <div className="lg:col-span-2 bg-brand-bg/20 border border-brand-border rounded-xl p-4 min-h-[320px] flex flex-col shadow-sm min-w-0">
                           {previewSpecialItem !== null ? (
                             renderPreviewSpecialWorkspaceItem()
                           ) : previewTopic ? (
@@ -3625,7 +4200,7 @@ export default function ProfessorModules() {
                                   <span className="text-[10px] text-brand-muted mt-0.5">Switch back to Builder mode to add study sheets, images or videos.</span>
                                 </div>
                               ) : (
-                                <div className="flex flex-col gap-4 overflow-y-auto max-h-[300px] pr-1">
+                                <div className="flex flex-col gap-4">
                                   {((previewSubtopic ? previewSubtopic.materials : previewTopic.materials) || []).map((mat, idx) => {
                                     const embedUrl = mat.type === "video" ? getYouTubeEmbedUrl(mat.content) : null;
                                     
@@ -3711,8 +4286,8 @@ export default function ProfessorModules() {
                                             "justify-center"
                                           }`}>
                                             {mat.content ? (
-                                              <div className="border border-brand-border/30 bg-brand-bg/25 rounded-xl p-2.5 flex justify-center max-w-full">
-                                                <img src={mat.content} alt={mat.title} className="max-w-full h-auto rounded max-h-[200px] object-contain" />
+                                              <div className="border border-brand-border/30 bg-brand-bg/25 rounded-xl p-2.5 flex justify-center w-full">
+                                                <img src={mat.content} alt={mat.title} className="w-full max-w-[800px] h-auto rounded max-h-[600px] object-contain" />
                                               </div>
                                             ) : (
                                               <div className="border border-dashed border-brand-border/50 bg-brand-bg/15 rounded-xl p-4 flex flex-col items-center gap-2 max-w-xs">

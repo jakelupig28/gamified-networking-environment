@@ -833,7 +833,7 @@ export default function StudentCurriculum() {
         subtopic: null
       });
 
-      mod.topics.forEach((topic) => {
+      getPreviewTopics(mod.topics).forEach((topic) => {
         list.push({
           moduleId: mod.id,
           topic: topic,
@@ -910,230 +910,696 @@ export default function StudentCurriculum() {
         format: "a4",
       });
 
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(22);
-      doc.setTextColor(33, 33, 33);
-      doc.text("COURSE SYLLABUS", 20, 20);
-
-      doc.setFontSize(16);
-      doc.setTextColor(0, 150, 136);
-      doc.text(`Module: ${mod.title}`, 20, 30);
-
-      doc.setDrawColor(200, 200, 200);
-      doc.setLineWidth(0.5);
-      doc.line(20, 35, 190, 35);
-
-      let yPos = 45;
+      const pageWidth = 210;
       const pageHeight = 297;
+      const marginLeft = 18;
+      const marginRight = 18;
+      const contentWidth = pageWidth - marginLeft - marginRight;
+      const bottomMargin = 22;
 
-      for (let tIdx = 0; tIdx < mod.topics.length; tIdx++) {
-        const topic = mod.topics[tIdx];
-        if (yPos > pageHeight - 35) {
+      // Helper: ensure enough vertical space, else add page
+      const ensureSpace = (needed: number) => {
+        if (yPos > pageHeight - bottomMargin - needed) {
+          // Draw page footer before adding page
+          addPageFooter(doc.internal.getNumberOfPages());
           doc.addPage();
-          yPos = 20;
+          yPos = 22;
+        }
+      };
+
+      // Helper: add footer with page number
+      const addPageFooter = (pageNum: number) => {
+        const totalPages = doc.internal.getNumberOfPages();
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        doc.setTextColor(160, 160, 160);
+        doc.text(
+          `Page ${pageNum}`,
+          pageWidth / 2,
+          pageHeight - 10,
+          { align: "center" }
+        );
+      };
+
+      // Helper: extract YouTube URL for display
+      const getYouTubeDisplayUrl = (url: string): string => {
+        if (!url) return url;
+        if (url.startsWith('yt-search:')) {
+          return `https://www.youtube.com/results?search_query=${encodeURIComponent(url.replace('yt-search:', ''))}`;
+        }
+        return url;
+      };
+
+      // Helper: get YouTube video ID from URL
+      const extractYouTubeId = (url: string): string | null => {
+        if (!url) return null;
+        const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+        const match = url.match(regExp);
+        if (match && match[2].length === 11) return match[2];
+        return null;
+      };
+
+      // Helper: render text content with style awareness and inline bold support
+      const renderTextContent = (
+        content: string,
+        textStyle: string | undefined,
+        xStart: number,
+        maxWidth: number,
+        isSubtopic: boolean
+      ) => {
+        const style = textStyle || "normal";
+
+        // Parse content into segments with bold/normal runs
+        // First split by <p> tags to get paragraphs
+        const paragraphBlocks = content
+          .split(/<\/p>/gi)
+          .map(block => block.replace(/<p[^>]*>/gi, "").trim())
+          .filter(block => block.length > 0);
+
+        // For quote style, add indent
+        const quoteIndent = style === "quote" ? 4 : 0;
+        const codeIndent = style === "code" ? 2 : 0;
+        const adjustedX = xStart + quoteIndent + codeIndent;
+        const adjustedWidth = maxWidth - quoteIndent - codeIndent;
+
+        // For headings, add visual spacing
+        if (style === "heading") {
+          yPos += 2;
         }
 
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(14);
-        doc.setTextColor(33, 33, 33);
-        doc.text(`${tIdx + 1}. Topic: ${topic.title}`, 20, yPos);
-        yPos += 8;
+        // Track quote start for vertical bar
+        const quoteStartY = style === "quote" ? yPos : 0;
 
-        const materialsList = topic.materials || [];
-        const subtopicsList = topic.subtopics || [];
+        // Set base font size based on style
+        let baseFontSize = 10;
+        let baseTextColor: [number, number, number] = [60, 60, 60];
+        let baseFontStyle = "normal";
 
-        for (const mat of materialsList) {
-          if (yPos > pageHeight - 30) {
-            doc.addPage();
-            yPos = 20;
+        switch (style) {
+          case "heading":
+            baseFontSize = 13;
+            baseTextColor = [0, 120, 110];
+            baseFontStyle = "bold";
+            break;
+          case "bold":
+            baseFontSize = 10;
+            baseTextColor = [50, 50, 50];
+            baseFontStyle = "bold";
+            break;
+          case "italic":
+            baseFontSize = 10;
+            baseTextColor = [80, 80, 80];
+            baseFontStyle = "italic";
+            break;
+          case "quote":
+            baseFontSize = 10;
+            baseTextColor = [100, 100, 100];
+            baseFontStyle = "italic";
+            break;
+          case "code":
+            baseFontSize = 9;
+            baseTextColor = [40, 120, 40];
+            baseFontStyle = "normal";
+            break;
+          default:
+            baseFontSize = 10;
+            baseTextColor = [60, 60, 60];
+            baseFontStyle = "normal";
+            break;
+        }
+
+        const fontFamily = style === "code" ? "courier" : "helvetica";
+        const lineHeight = style === "code" ? 4.5 : style === "heading" ? 6.5 : 5;
+
+        // Helper to clean HTML entities from a text segment
+        const cleanEntities = (text: string): string => {
+          return text
+            .replace(/<br\s*\/?>/gi, "\n")
+            .replace(/&nbsp;/g, " ")
+            .replace(/&amp;/g, "&")
+            .replace(/&lt;/g, "<")
+            .replace(/&gt;/g, ">")
+            .replace(/&quot;/g, "\"")
+            .replace(/&#39;/g, "'")
+            .replace(/&rsquo;/g, "'")
+            .replace(/&lsquo;/g, "'")
+            .replace(/&rdquo;/g, "\u201D")
+            .replace(/&ldquo;/g, "\u201C")
+            .replace(/&mdash;/g, "\u2014")
+            .replace(/&ndash;/g, "\u2013")
+            .replace(/&bull;/g, "\u2022")
+            .replace(/&hellip;/g, "\u2026");
+        };
+
+        // Parse a paragraph's HTML into segments of {text, bold}
+        const parseSegments = (html: string): { text: string; bold: boolean }[] => {
+          const segments: { text: string; bold: boolean }[] = [];
+          // Split by <strong> and </strong> tags
+          const parts = html.split(/(<strong>|<\/strong>|<b>|<\/b>)/gi);
+          let isBold = false;
+          for (const part of parts) {
+            const lower = part.toLowerCase();
+            if (lower === "<strong>" || lower === "<b>") {
+              isBold = true;
+              continue;
+            }
+            if (lower === "</strong>" || lower === "</b>") {
+              isBold = false;
+              continue;
+            }
+            // Strip remaining HTML tags
+            const cleaned = cleanEntities(part.replace(/<[^>]*>/g, ""));
+            if (cleaned) {
+              segments.push({ text: cleaned, bold: isBold });
+            }
+          }
+          return segments;
+        };
+
+        // Render segments with inline bold support
+        const renderParagraphSegments = (segments: { text: string; bold: boolean }[]) => {
+          // Flatten all segments into one string for line-breaking, then re-apply bold
+          const fullText = segments.map(s => s.text).join("");
+          if (!fullText.trim()) {
+            yPos += 3;
+            return;
           }
 
-          doc.setFont("helvetica", "bold");
-          doc.setFontSize(11);
-          doc.setTextColor(60, 60, 60);
-          doc.text(`[${mat.type.toUpperCase()}] ${mat.title}`, 22, yPos);
-          yPos += 6;
+          // For simple cases (single segment or all same style), use simple rendering
+          const hasMixedBold = segments.some(s => s.bold) && segments.some(s => !s.bold);
 
-          if (mat.type === "text" && mat.content) {
-            const cleanText = mat.content
-              .replace(/<br\s*\/?>/gi, "\n")
-              .replace(/<\/p>/gi, "\n\n")
-              .replace(/<[^>]*>/g, "")
-              .replace(/&nbsp;/g, " ")
-              .replace(/&amp;/g, "&")
-              .replace(/&lt;/g, "<")
-              .replace(/&gt;/g, ">");
+          if (!hasMixedBold || style === "code") {
+            // Simple rendering - all same style
+            const isBold = segments.some(s => s.bold) || baseFontStyle === "bold";
+            doc.setFont(fontFamily, isBold ? "bold" : baseFontStyle);
+            doc.setFontSize(baseFontSize);
+            doc.setTextColor(...baseTextColor);
 
-            doc.setFont("helvetica", "normal");
-            doc.setFontSize(10);
-            doc.setTextColor(100, 100, 100);
-
-            const paragraphs = cleanText.split("\n");
-            paragraphs.forEach((para) => {
-              const trimmedPara = para.trim();
-              if (!trimmedPara) {
-                yPos += 3;
-                return;
+            // Handle line breaks within the text
+            const lines = fullText.split("\n");
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed) {
+                yPos += 2.5;
+                continue;
               }
-              const splitText = doc.splitTextToSize(trimmedPara, 160);
-              splitText.forEach((line: string) => {
-                if (yPos > pageHeight - 20) {
-                  doc.addPage();
-                  yPos = 20;
-                }
-                doc.text(line, 24, yPos);
+              const splitText = doc.splitTextToSize(trimmed, adjustedWidth);
+              splitText.forEach((wrappedLine: string) => {
+                ensureSpace(lineHeight + 1);
+                doc.text(wrappedLine, adjustedX, yPos);
+                yPos += lineHeight;
+              });
+            }
+            yPos += 2;
+            return;
+          }
+
+          // Mixed bold/normal rendering - render segment by segment with word wrapping
+          // Build a flat array of words with their bold state
+          type WordInfo = { word: string; bold: boolean; spaceAfter: boolean };
+          const words: WordInfo[] = [];
+          for (const seg of segments) {
+            const segWords = seg.text.split(/(\s+)/);
+            for (let i = 0; i < segWords.length; i++) {
+              const w = segWords[i];
+              if (!w) continue;
+              if (/^\s+$/.test(w)) continue; // skip whitespace-only
+              words.push({ word: w, bold: seg.bold, spaceAfter: true });
+            }
+          }
+
+          let currentX = adjustedX;
+          const spaceWidth = (() => {
+            doc.setFont(fontFamily, "normal");
+            doc.setFontSize(baseFontSize);
+            return doc.getTextWidth(" ");
+          })();
+
+          ensureSpace(lineHeight + 1);
+
+          for (let i = 0; i < words.length; i++) {
+            const w = words[i];
+            const fStyle = w.bold ? "bold" : baseFontStyle;
+            doc.setFont(fontFamily, fStyle);
+            doc.setFontSize(baseFontSize);
+            doc.setTextColor(...baseTextColor);
+
+            const wordWidth = doc.getTextWidth(w.word);
+
+            // Check if word fits on current line
+            if (currentX + wordWidth > adjustedX + adjustedWidth && currentX > adjustedX) {
+              // Wrap to next line
+              yPos += lineHeight;
+              ensureSpace(lineHeight + 1);
+              currentX = adjustedX;
+            }
+
+            doc.text(w.word, currentX, yPos);
+            currentX += wordWidth + spaceWidth;
+          }
+
+          yPos += lineHeight + 2;
+        };
+
+        // Process each paragraph block
+        for (let pIdx = 0; pIdx < paragraphBlocks.length; pIdx++) {
+          const block = paragraphBlocks[pIdx];
+
+          // Handle <br> within a paragraph block
+          const subLines = block.split(/<br\s*\/?>/gi);
+          for (const subLine of subLines) {
+            const segments = parseSegments(subLine);
+            if (segments.length > 0) {
+              renderParagraphSegments(segments);
+            }
+          }
+
+          // Add paragraph spacing
+          yPos += 2;
+        }
+
+        // Draw quote vertical bar
+        if (style === "quote" && quoteStartY > 0) {
+          doc.setDrawColor(0, 150, 136);
+          doc.setLineWidth(0.8);
+          doc.line(xStart + 1, quoteStartY - 1, xStart + 1, yPos - 1);
+        }
+
+        // Spacing after heading
+        if (style === "heading") {
+          yPos += 2;
+        }
+
+        yPos += 2;
+      };
+
+      // Helper: convert any image (including SVG) to a canvas-based PNG data URL
+      const convertToCanvasDataUrl = (img: HTMLImageElement, originalSrc: string): Promise<string> => {
+        return new Promise((resolve) => {
+          // If it's already a raster format, just return the original src
+          if (!originalSrc.startsWith("data:image/svg")) {
+            resolve(originalSrc);
+            return;
+          }
+          // SVG needs canvas conversion
+          const canvas = document.createElement("canvas");
+          // Use a reasonable resolution for SVG rendering
+          const scale = 2; // 2x for crisp rendering
+          canvas.width = img.width * scale || 800;
+          canvas.height = img.height * scale || 600;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.fillStyle = "#FFFFFF";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          }
+          resolve(canvas.toDataURL("image/png"));
+        });
+      };
+
+      // Helper: render an image material
+      const renderImage = async (
+        content: string,
+        title: string,
+        xStart: number,
+        maxImgWidth: number
+      ) => {
+        try {
+          const img = await loadImageElement(content);
+
+          // Convert SVG to PNG via canvas
+          const imgDataUrl = await convertToCanvasDataUrl(img, content);
+
+          // Reload as raster if it was SVG
+          let finalImg = img;
+          if (content.startsWith("data:image/svg")) {
+            finalImg = await loadImageElement(imgDataUrl);
+          }
+
+          // Convert pixel dimensions to mm (96 DPI: 1px = 0.2646mm)
+          const pxToMm = 0.2646;
+          let imgWmm = finalImg.width * pxToMm;
+          let imgHmm = finalImg.height * pxToMm;
+          const ratio = imgWmm / imgHmm;
+
+          const maxH = 140; // max height in mm
+
+          // Scale down to fit content width
+          if (imgWmm > maxImgWidth) {
+            imgWmm = maxImgWidth;
+            imgHmm = imgWmm / ratio;
+          }
+          // Cap height
+          if (imgHmm > maxH) {
+            imgHmm = maxH;
+            imgWmm = imgHmm * ratio;
+          }
+          // Ensure minimum readable size (at least 30mm wide if original is bigger)
+          if (imgWmm < 30 && finalImg.width > 100) {
+            imgWmm = Math.min(60, maxImgWidth);
+            imgHmm = imgWmm / ratio;
+          }
+
+          ensureSpace(imgHmm + 12);
+
+          // Center the image within the content area
+          const xPos = xStart + (maxImgWidth - imgWmm) / 2;
+
+          // Draw a subtle border around the image
+          doc.setDrawColor(210, 210, 210);
+          doc.setLineWidth(0.3);
+          doc.roundedRect(xPos - 1, yPos - 1, imgWmm + 2, imgHmm + 2, 1, 1);
+
+          doc.addImage(imgDataUrl, "PNG", xPos, yPos, imgWmm, imgHmm);
+          yPos += imgHmm + 3;
+
+          // Add caption below image if title exists and is meaningful
+          if (title && title !== "Reference Image" && title !== "Lecture Reading") {
+            doc.setFont("helvetica", "italic");
+            doc.setFontSize(8);
+            doc.setTextColor(140, 140, 140);
+            const captionLines = doc.splitTextToSize(title, maxImgWidth);
+            captionLines.forEach((line: string) => {
+              ensureSpace(5);
+              doc.text(line, xStart + maxImgWidth / 2, yPos, { align: "center" });
+              yPos += 4;
+            });
+          }
+
+          yPos += 5;
+        } catch (err) {
+          console.error("Failed to load image for PDF:", err);
+          doc.setFont("helvetica", "italic");
+          doc.setFontSize(9);
+          doc.setTextColor(200, 80, 80);
+          doc.text(`[Image could not be loaded: ${title}]`, xStart, yPos);
+          yPos += 6;
+        }
+      };
+
+      // Helper: render a video link
+      const renderVideoLink = (
+        content: string,
+        title: string,
+        xStart: number,
+        maxWidth: number
+      ) => {
+        ensureSpace(18);
+
+        const displayUrl = getYouTubeDisplayUrl(content);
+        const videoId = extractYouTubeId(content);
+
+        // Draw a styled video link box
+        doc.setFillColor(252, 245, 245);
+        doc.setDrawColor(220, 60, 60);
+        doc.setLineWidth(0.4);
+        doc.roundedRect(xStart, yPos - 2, maxWidth, 14, 2, 2, "FD");
+
+        // YouTube play icon area
+        doc.setFillColor(220, 50, 50);
+        doc.roundedRect(xStart + 2, yPos, 10, 10, 1.5, 1.5, "F");
+
+        // Play triangle
+        doc.setFillColor(255, 255, 255);
+        doc.triangle(
+          xStart + 5.5, yPos + 2.5,
+          xStart + 5.5, yPos + 7.5,
+          xStart + 9.5, yPos + 5,
+          "F"
+        );
+
+        // Video title
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9);
+        doc.setTextColor(50, 50, 50);
+        const titleText = title || "Video Lecture";
+        const truncTitle = titleText.length > 60 ? titleText.substring(0, 57) + "..." : titleText;
+        doc.text(truncTitle, xStart + 15, yPos + 4);
+
+        // URL link
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(7.5);
+        doc.setTextColor(0, 100, 200);
+        const truncUrl = displayUrl.length > 80 ? displayUrl.substring(0, 77) + "..." : displayUrl;
+        doc.textWithLink(truncUrl, xStart + 15, yPos + 9, { url: displayUrl });
+
+        yPos += 16;
+      };
+
+      // Helper: render a file attachment note
+      const renderFileAttachment = (
+        title: string,
+        fileName: string | undefined,
+        fileSize: string | undefined,
+        xStart: number,
+        maxWidth: number
+      ) => {
+        ensureSpace(14);
+
+        doc.setFillColor(245, 250, 255);
+        doc.setDrawColor(100, 160, 220);
+        doc.setLineWidth(0.3);
+        doc.roundedRect(xStart, yPos - 2, maxWidth, 12, 2, 2, "FD");
+
+        // File icon area
+        doc.setFillColor(100, 160, 220);
+        doc.roundedRect(xStart + 2, yPos, 8, 8, 1, 1, "F");
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(6);
+        doc.setTextColor(255, 255, 255);
+        doc.text("FILE", xStart + 3, yPos + 5);
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9);
+        doc.setTextColor(50, 50, 50);
+        doc.text(fileName || title || "Attached Document", xStart + 13, yPos + 4);
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(7.5);
+        doc.setTextColor(130, 130, 130);
+        doc.text(fileSize ? `${fileSize} • Document Attachment` : "Document Attachment", xStart + 13, yPos + 8);
+
+        yPos += 14;
+      };
+
+      let yPos = 0;
+
+      // ============ COVER PAGE ============
+      // Background accent bar
+      doc.setFillColor(0, 150, 136);
+      doc.rect(0, 0, pageWidth, 60, "F");
+
+      // Title
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(28);
+      doc.setTextColor(255, 255, 255);
+      doc.text("COURSE MODULE", marginLeft, 28);
+
+      // Module title
+      doc.setFontSize(14);
+      doc.setTextColor(200, 255, 250);
+      const modTitleLines = doc.splitTextToSize(mod.title, contentWidth);
+      modTitleLines.forEach((line: string, idx: number) => {
+        doc.text(line, marginLeft, 40 + idx * 7);
+      });
+
+      // Decorative line
+      doc.setDrawColor(255, 255, 255);
+      doc.setLineWidth(0.5);
+      doc.line(marginLeft, 52, marginLeft + 50, 52);
+
+      // Module info section
+      yPos = 72;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+
+      const previewTopics = getPreviewTopics(mod.topics);
+      const totalMaterials = previewTopics.reduce((sum, t) => {
+        let count = (t.materials || []).length;
+        count += (t.subtopics || []).reduce((sSum: number, s: any) => sSum + (s.materials || []).length, 0);
+        return sum + count;
+      }, 0);
+
+      doc.text(`Topics: ${previewTopics.length}`, marginLeft, yPos);
+      yPos += 6;
+      doc.text(`Total Materials: ${totalMaterials}`, marginLeft, yPos);
+      yPos += 6;
+      doc.text(`Generated: ${new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}`, marginLeft, yPos);
+      yPos += 12;
+
+      // Table of Contents
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.setTextColor(0, 150, 136);
+      doc.text("TABLE OF CONTENTS", marginLeft, yPos);
+      yPos += 2;
+      doc.setDrawColor(0, 150, 136);
+      doc.setLineWidth(0.6);
+      doc.line(marginLeft, yPos, marginLeft + 55, yPos);
+      yPos += 8;
+
+      for (let tIdx = 0; tIdx < previewTopics.length; tIdx++) {
+        const topic = previewTopics[tIdx];
+        ensureSpace(8);
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(10);
+        doc.setTextColor(50, 50, 50);
+        doc.text(`${tIdx + 1}.  ${topic.title}`, marginLeft + 2, yPos);
+        yPos += 6;
+
+        const subtopicsList = topic.subtopics || [];
+        for (let sIdx = 0; sIdx < subtopicsList.length; sIdx++) {
+          ensureSpace(6);
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(9);
+          doc.setTextColor(110, 110, 110);
+          doc.text(`   ${tIdx + 1}.${sIdx + 1}  ${subtopicsList[sIdx].title}`, marginLeft + 8, yPos);
+          yPos += 5;
+        }
+        yPos += 2;
+      }
+
+      addPageFooter(1);
+
+      // ============ CONTENT PAGES ============
+      for (let tIdx = 0; tIdx < previewTopics.length; tIdx++) {
+        const topic = previewTopics[tIdx];
+
+        // Start each topic on a new page
+        doc.addPage();
+        yPos = 18;
+
+        // Topic header bar
+        doc.setFillColor(0, 150, 136);
+        doc.rect(0, 0, pageWidth, 4, "F");
+
+        // Topic number badge
+        doc.setFillColor(0, 150, 136);
+        doc.roundedRect(marginLeft, yPos - 2, 10, 10, 2, 2, "F");
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(12);
+        doc.setTextColor(255, 255, 255);
+        doc.text(`${tIdx + 1}`, marginLeft + 5, yPos + 5, { align: "center" });
+
+        // Topic title
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(16);
+        doc.setTextColor(33, 33, 33);
+        const topicTitleLines = doc.splitTextToSize(topic.title, contentWidth - 16);
+        topicTitleLines.forEach((line: string, idx: number) => {
+          doc.text(line, marginLeft + 14, yPos + 2 + idx * 7);
+        });
+        yPos += 4 + topicTitleLines.length * 7;
+
+        // Thin divider
+        doc.setDrawColor(220, 220, 220);
+        doc.setLineWidth(0.3);
+        doc.line(marginLeft, yPos, pageWidth - marginRight, yPos);
+        yPos += 8;
+
+        // Render topic materials
+        const materialsList = topic.materials || [];
+
+        for (const mat of materialsList) {
+          // Skip special placeholder content
+          if (mat.content === "interactive-activity-placeholder" || mat.content === "module-discussion-placeholder") {
+            continue;
+          }
+
+          ensureSpace(12);
+
+          // Material type badge + title
+          if (mat.type === "text") {
+            // For text materials, show the title as a section header if it exists
+            if (mat.title && mat.title.trim()) {
+              doc.setFont("helvetica", "bold");
+              doc.setFontSize(10);
+              doc.setTextColor(0, 120, 110);
+              const matTitleLines = doc.splitTextToSize(mat.title, contentWidth);
+              matTitleLines.forEach((line: string) => {
+                ensureSpace(6);
+                doc.text(line, marginLeft + 1, yPos);
                 yPos += 5;
               });
               yPos += 2;
-            });
-            yPos += 4;
-          } else if (mat.type === "image" && mat.content) {
-            try {
-              const img = await loadImageElement(mat.content);
-              const maxW = 160;
-              const maxH = 100;
-              let imgW = img.width;
-              let imgH = img.height;
-              const ratio = imgW / imgH;
-              if (imgW > maxW) {
-                imgW = maxW;
-                imgH = imgW / ratio;
-              }
-              if (imgH > maxH) {
-                imgH = maxH;
-                imgW = imgH * ratio;
-              }
-
-              if (yPos > pageHeight - imgH - 25) {
-                doc.addPage();
-                yPos = 20;
-              }
-
-              const xPos = 20 + (160 - imgW) / 2;
-              let format = "PNG";
-              if (mat.content.startsWith("data:image/jpeg") || mat.content.startsWith("data:image/jpg")) {
-                format = "JPEG";
-              } else if (mat.content.startsWith("data:image/webp")) {
-                format = "WEBP";
-              }
-              doc.addImage(img, format, xPos, yPos, imgW, imgH);
-              yPos += imgH + 8;
-            } catch (err) {
-              console.error("Failed to load image for PDF:", err);
             }
+            renderTextContent(mat.content, mat.textStyle, marginLeft + 1, contentWidth - 2, false);
+          } else if (mat.type === "image" && mat.content) {
+            await renderImage(mat.content, mat.title, marginLeft, contentWidth);
           } else if (mat.type === "video") {
-            doc.setFont("helvetica", "oblique");
-            doc.setFontSize(10);
-            doc.setTextColor(0, 100, 200);
-            doc.text(`Video Link: ${mat.content}`, 24, yPos);
-            yPos += 7;
+            renderVideoLink(mat.content, mat.title, marginLeft, contentWidth);
+          } else if (mat.type === "file") {
+            renderFileAttachment(mat.title, mat.fileName, mat.fileSize, marginLeft, contentWidth);
           }
         }
 
+        // Render subtopics
+        const subtopicsList = topic.subtopics || [];
         for (let sIdx = 0; sIdx < subtopicsList.length; sIdx++) {
           const sub = subtopicsList[sIdx];
-          if (yPos > pageHeight - 30) {
-            doc.addPage();
-            yPos = 20;
-          }
+
+          ensureSpace(16);
+
+          // Subtopic header
+          yPos += 3;
+          doc.setDrawColor(0, 150, 136);
+          doc.setLineWidth(0.4);
+          doc.line(marginLeft, yPos, marginLeft + 8, yPos);
 
           doc.setFont("helvetica", "bold");
           doc.setFontSize(12);
-          doc.setTextColor(80, 80, 80);
-          doc.text(`  ${tIdx + 1}.${sIdx + 1} Subtopic: ${sub.title}`, 22, yPos);
-          yPos += 7;
+          doc.setTextColor(60, 60, 60);
+          doc.text(`${tIdx + 1}.${sIdx + 1}  ${sub.title}`, marginLeft + 10, yPos + 1);
+          yPos += 8;
 
           const subMaterials = sub.materials || [];
           for (const mat of subMaterials) {
-            if (yPos > pageHeight - 30) {
-              doc.addPage();
-              yPos = 20;
+            if (mat.content === "interactive-activity-placeholder" || mat.content === "module-discussion-placeholder") {
+              continue;
             }
 
-            doc.setFont("helvetica", "bold");
-            doc.setFontSize(10);
-            doc.setTextColor(100, 100, 100);
-            doc.text(`    [${mat.type.toUpperCase()}] ${mat.title}`, 24, yPos);
-            yPos += 6;
+            ensureSpace(12);
 
-            if (mat.type === "text" && mat.content) {
-              const cleanText = mat.content
-                .replace(/<br\s*\/?>/gi, "\n")
-                .replace(/<\/p>/gi, "\n\n")
-                .replace(/<[^>]*>/g, "")
-                .replace(/&nbsp;/g, " ")
-                .replace(/&amp;/g, "&")
-                .replace(/&lt;/g, "<")
-                .replace(/&gt;/g, ">");
-
-              doc.setFont("helvetica", "normal");
-              doc.setFontSize(9.5);
-              doc.setTextColor(110, 110, 110);
-
-              const paragraphs = cleanText.split("\n");
-              paragraphs.forEach((para) => {
-                const trimmedPara = para.trim();
-                if (!trimmedPara) {
-                  yPos += 3;
-                  return;
-                }
-                const splitText = doc.splitTextToSize(trimmedPara, 155);
-                splitText.forEach((line: string) => {
-                  if (yPos > pageHeight - 20) {
-                    doc.addPage();
-                    yPos = 20;
-                  }
-                  doc.text(line, 26, yPos);
+            if (mat.type === "text") {
+              if (mat.title && mat.title.trim()) {
+                doc.setFont("helvetica", "bold");
+                doc.setFontSize(9.5);
+                doc.setTextColor(0, 120, 110);
+                const matTitleLines = doc.splitTextToSize(mat.title, contentWidth - 6);
+                matTitleLines.forEach((line: string) => {
+                  ensureSpace(6);
+                  doc.text(line, marginLeft + 4, yPos);
                   yPos += 5;
                 });
-                yPos += 2;
-              });
-              yPos += 4;
-            } else if (mat.type === "image" && mat.content) {
-              try {
-                const img = await loadImageElement(mat.content);
-                const maxW = 150;
-                const maxH = 90;
-                let imgW = img.width;
-                let imgH = img.height;
-                const ratio = imgW / imgH;
-                if (imgW > maxW) {
-                  imgW = maxW;
-                  imgH = imgW / ratio;
-                }
-                if (imgH > maxH) {
-                  imgH = maxH;
-                  imgW = imgH * ratio;
-                }
-
-                if (yPos > pageHeight - imgH - 25) {
-                  doc.addPage();
-                  yPos = 20;
-                }
-
-                const xPos = 24 + (150 - imgW) / 2;
-                let format = "PNG";
-                if (mat.content.startsWith("data:image/jpeg") || mat.content.startsWith("data:image/jpg")) {
-                  format = "JPEG";
-                } else if (mat.content.startsWith("data:image/webp")) {
-                  format = "WEBP";
-                }
-                doc.addImage(img, format, xPos, yPos, imgW, imgH);
-                yPos += imgH + 8;
-              } catch (err) {
-                console.error("Failed to load subtopic image for PDF:", err);
+                yPos += 1;
               }
+              renderTextContent(mat.content, mat.textStyle, marginLeft + 4, contentWidth - 8, true);
+            } else if (mat.type === "image" && mat.content) {
+              await renderImage(mat.content, mat.title, marginLeft + 2, contentWidth - 4);
             } else if (mat.type === "video") {
-              doc.setFont("helvetica", "oblique");
-              doc.setFontSize(9.5);
-              doc.setTextColor(0, 100, 200);
-              doc.text(`    Video Link: ${mat.content}`, 26, yPos);
-              yPos += 7;
+              renderVideoLink(mat.content, mat.title, marginLeft + 2, contentWidth - 4);
+            } else if (mat.type === "file") {
+              renderFileAttachment(mat.title, mat.fileName, mat.fileSize, marginLeft + 2, contentWidth - 4);
             }
           }
         }
+      }
 
-        yPos += 5;
+      // Add page footers to all pages
+      const totalPages = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        doc.setTextColor(160, 160, 160);
+        doc.text(
+          `${mod.title}  •  Page ${i} of ${totalPages}`,
+          pageWidth / 2,
+          pageHeight - 10,
+          { align: "center" }
+        );
       }
 
       doc.save(`Module_${mod.title.replace(/[^a-zA-Z0-9]/g, "_")}.pdf`);
@@ -1292,13 +1758,15 @@ export default function StudentCurriculum() {
   };
 
   const getModuleProgress = (mod: Module): number => {
-    if (!mod.topics || mod.topics.length === 0) return 0;
-    const totalProgress = mod.topics.reduce((acc, topic, idx) => {
-      const isUnlocked = isTopicUnlocked(mod, idx);
+    const previewTopics = getPreviewTopics(mod.topics);
+    if (previewTopics.length === 0) return 0;
+    const totalProgress = previewTopics.reduce((acc, topic) => {
+      const originalIdx = mod.topics.findIndex(t => t.id === topic.id);
+      const isUnlocked = isTopicUnlocked(mod, originalIdx);
       const progress = isUnlocked ? getTopicProgress(topic) : 0;
       return acc + progress;
     }, 0);
-    return Math.round(totalProgress / mod.topics.length);
+    return Math.round(totalProgress / previewTopics.length);
   };
 
   const submitPretest = (moduleId: number, pretest: PretestQuestion[]) => {
@@ -1333,6 +1801,14 @@ export default function StudentCurriculum() {
     if (topicIdx === 0) return true;
     const prevTopic = mod.topics[topicIdx - 1];
     return !!(completedTopics && prevTopic && completedTopics[prevTopic.id]);
+  };
+
+  // Helper to filter out References topics
+  const getPreviewTopics = (topicsList: any[]): any[] => {
+    return (topicsList || []).filter(t => {
+      const titleUpper = t.title.toUpperCase().trim();
+      return titleUpper !== 'REFERENCES' && titleUpper !== 'BIBLIOGRAPHY' && !/^REFERENCE\b/.test(titleUpper);
+    });
   };
 
   const ensureInteractiveActivity = (mods: Module[]): Module[] => {
@@ -1429,9 +1905,10 @@ export default function StudentCurriculum() {
             setSelectedModuleId(processed[0].id);
             setExpandedModules({ [processed[0].id]: true });
 
-            if (processed[0].topics.length > 0) {
-              setSelectedTopic(processed[0].topics[0]);
-              setExpandedTopics({ [processed[0].topics[0].id]: true });
+            const previewableTopics = getPreviewTopics(processed[0].topics);
+            if (previewableTopics.length > 0) {
+              setSelectedTopic(previewableTopics[0]);
+              setExpandedTopics({ [previewableTopics[0].id]: true });
             }
           }
           try {
@@ -1477,9 +1954,10 @@ export default function StudentCurriculum() {
             setSelectedModuleId(processed[0].id);
             setExpandedModules({ [processed[0].id]: true });
 
-            if (processed[0].topics.length > 0) {
-              setSelectedTopic(processed[0].topics[0]);
-              setExpandedTopics({ [processed[0].topics[0].id]: true });
+            const previewableTopics = getPreviewTopics(processed[0].topics);
+            if (previewableTopics.length > 0) {
+              setSelectedTopic(previewableTopics[0]);
+              setExpandedTopics({ [previewableTopics[0].id]: true });
             }
           }
         } catch (e) {
@@ -1913,7 +2391,7 @@ export default function StudentCurriculum() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
 
             {/* LEFT COLUMN: Curriculum Tree Selection */}
-            <div className="lg:col-span-1 bg-brand-card border border-brand-border rounded-2xl p-5 shadow-lg flex flex-col gap-4">
+            <div className="lg:col-span-1 bg-brand-card border border-brand-border rounded-2xl p-5 shadow-lg flex flex-col gap-4 min-w-0">
               <h3 className="font-bold text-sm text-brand-muted uppercase tracking-wider mb-1">
                 Networking 1
               </h3>
@@ -2100,12 +2578,12 @@ export default function StudentCurriculum() {
                             </button>
                           )}
 
-                          {mod.topics.length === 0 ? (
+                          {getPreviewTopics(mod.topics).length === 0 ? (
                             <div className="text-[10px] text-brand-muted/70 px-3 py-2 italic">
                               No topics outlined yet
                             </div>
                           ) : (
-                            mod.topics.map((topic, topicIdx) => {
+                            getPreviewTopics(mod.topics).map((topic, topicIdx) => {
                               const isUnlocked = isTopicUnlocked(mod, topicIdx);
                               const isTopicSelected = selectedTopic?.id === topic.id && !selectedSubtopic;
                               const isTopicExpanded = expandedTopics[topic.id] === true;
@@ -2254,7 +2732,7 @@ export default function StudentCurriculum() {
               </div>
             </div>
             {/* RIGHT COLUMN: Study Workspace Panel */}
-            <div ref={workspaceRef} className="lg:col-span-2 bg-brand-card border border-brand-border rounded-2xl p-6 shadow-lg min-h-[460px] flex flex-col animate-all duration-300">
+            <div ref={workspaceRef} className="lg:col-span-2 bg-brand-card border border-brand-border rounded-2xl p-6 shadow-lg min-h-[460px] flex flex-col animate-all duration-300 min-w-0">
 
               {selectedSpecialItem !== null ? (
                 // SPECIAL WORKSPACE VIEW
@@ -2295,7 +2773,7 @@ export default function StudentCurriculum() {
                           setTakingPretest(false);
                           setPretestScore(null);
                           if (selectedModule.topics.length > 0) {
-                            setSelectedTopic(selectedModule.topics[0]);
+                            setSelectedTopic(getPreviewTopics(selectedModule.topics)[0]);
                           }
                         }}
                         className="mt-6 px-6 py-3 bg-brand-cyan hover:bg-brand-cyan-hover text-brand-bg font-extrabold text-sm rounded-xl transition-all shadow-md cursor-pointer"
@@ -2439,11 +2917,11 @@ export default function StudentCurriculum() {
 
                     <div className="flex flex-col gap-4">
                       <h3 className="font-bold text-xs uppercase tracking-wider text-brand-muted">Topics in this Module</h3>
-                      {selectedModule.topics.length === 0 ? (
+                      {getPreviewTopics(selectedModule.topics).length === 0 ? (
                         <div className="text-xs text-brand-muted italic py-4">No topics in this module.</div>
                       ) : (
                         <div className="grid gap-3">
-                          {selectedModule.topics.map((topic, index) => {
+                          {getPreviewTopics(selectedModule.topics).map((topic, index) => {
                             const isUnlocked = isTopicUnlocked(selectedModule, index);
                             const progress = isUnlocked ? getTopicProgress(topic) : 0;
                             const preview = getTopicPreview(topic);
@@ -2551,10 +3029,11 @@ export default function StudentCurriculum() {
                     ) : (
                       <button
                         onClick={() => {
-                          if (selectedModule.topics.length > 0) {
-                            setSelectedTopic(selectedModule.topics[0]);
+                          const previewableTopics = getPreviewTopics(selectedModule.topics);
+                          if (previewableTopics.length > 0) {
+                            setSelectedTopic(previewableTopics[0]);
                             setSelectedSubtopic(null);
-                            setExpandedTopics(prev => ({ ...prev, [selectedModule.topics[0].id]: true }));
+                            setExpandedTopics(prev => ({ ...prev, [previewableTopics[0].id]: true }));
                           }
                         }}
                         disabled={selectedModule.topics.length === 0}
@@ -2845,11 +3324,11 @@ export default function StudentCurriculum() {
                                       mat.imageAlign === "right" ? "justify-end" :
                                         "justify-center"
                                       }`}>
-                                      <div className="border border-brand-border/40 bg-brand-bg/25 rounded-xl p-3.5 flex flex-col items-center gap-2 max-w-full">
+                                      <div className="border border-brand-border/40 bg-brand-bg/25 rounded-xl p-3.5 flex flex-col items-center gap-2 w-full">
                                         <img
                                           src={mat.content}
                                           alt={mat.title}
-                                          className="max-w-full h-auto rounded-lg max-h-[380px] shadow-sm object-contain"
+                                          className="w-full max-w-[800px] h-auto rounded-lg max-h-[600px] shadow-sm object-contain"
                                         />
                                       </div>
                                     </div>

@@ -3,6 +3,8 @@ import mammoth from 'mammoth';
 import * as cheerio from 'cheerio';
 import zlib from 'zlib';
 
+let cachedWorkerSrc: string | null = null;
+
 
 type MaterialType = "text" | "video" | "image" | "file";
 
@@ -48,6 +50,36 @@ function extractYoutubeUrl(text: string): string | null {
   if (cleanedMatch) return cleanedMatch[0];
 
   return null;
+}
+
+function formatLearningMaterialHtml(text: string): string {
+  const paragraphs = text.split('\n\n');
+  const formattedParagraphs = paragraphs.map(p => {
+    let content = p.trim();
+    if (!content) return '';
+
+    const lines = content.split('\n');
+    if (lines.length > 1 && lines.every(line => /^[•\-*]\s/.test(line.trim()))) {
+      const listItems = lines.map(line => `<li>${line.trim().replace(/^[•\-*]\s+/, '')}</li>`).join('');
+      return `<ul class="list-disc list-inside space-y-1 my-2">${listItems}</ul>`;
+    }
+
+    if (content.startsWith('•') || content.startsWith('-') || content.startsWith('*')) {
+      content = content.replace(/^[•\-*]\s+/, '');
+      return `<li class="my-1">${formatTextInLine(content)}</li>`;
+    }
+
+    return `<p class="mb-3 last:mb-0 leading-relaxed">${formatTextInLine(content)}</p>`;
+  });
+
+  return formattedParagraphs.filter(Boolean).join('\n');
+}
+
+function formatTextInLine(line: string): string {
+  let formatted = line;
+  formatted = formatted.replace(/^([^:\n\r]{3,35}):/g, '<strong>$1:</strong>');
+  formatted = formatted.replace(/^(<strong>.*?<\/strong>)?\s*([^:\n\r]{3,25})\b\s*-\s*/g, '$1<strong>$2</strong> - ');
+  return formatted;
 }
 
 export async function POST(req: Request) {
@@ -147,8 +179,10 @@ async function parseDocx(buffer: Buffer, defaultTitle: string): Promise<ParsedMo
     // Also catches "Subtopic", "Sub-topic", "Section", "Sub-section"
     const startsWithTopic = /^(topic|chapter|lecture|unit)(\s*\d*[\.\:]?\s|\s*[\.\:]\s*|\s+\w)/i.test(text);
     const startsWithSubtopic = /^(subtopic|sub[\s\-]?topic|section|sub[\s\-]?section)(\s*[\d\.]*[\.\:]?\s|\s*[\.\:]\s*|\s+\w)/i.test(text);
+    const upperText = text.toUpperCase().trim();
+    const isModelSubHeadingText = (upperText.includes('OSI REFERENCE MODEL') || upperText.includes('TCP/IP PROTOCOL SUITE'));
 
-    if (isTopicHeading || startsWithTopic) {
+    if (isTopicHeading || startsWithTopic || isModelSubHeadingText) {
       flushTextBuffer();
       currentTopic = {
         id: Date.now() + Math.floor(Math.random() * 1000),
@@ -158,7 +192,7 @@ async function parseDocx(buffer: Buffer, defaultTitle: string): Promise<ParsedMo
       };
       topics.push(currentTopic);
       currentSubtopic = null;
-    } else if (isSubtopicHeading || startsWithSubtopic) {
+    } else if ((isSubtopicHeading || startsWithSubtopic) && !isModelSubHeadingText) {
       flushTextBuffer();
       if (!currentTopic) {
         currentTopic = {
@@ -227,9 +261,9 @@ async function parseDocx(buffer: Buffer, defaultTitle: string): Promise<ParsedMo
 function encodePng(width: number, height: number, data: Uint8Array | Uint8ClampedArray): string {
   const pixelCount = width * height;
   const hasAlpha = data.length === pixelCount * 4;
-  
+
   const pngSignature = Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
-  
+
   // IHDR chunk
   const ihdrData = Buffer.alloc(13);
   ihdrData.writeUInt32BE(width, 0);
@@ -240,7 +274,7 @@ function encodePng(width: number, height: number, data: Uint8Array | Uint8Clampe
   ihdrData[11] = 0; // filter
   ihdrData[12] = 0; // interlace
   const ihdrChunk = createChunk('IHDR', ihdrData);
-  
+
   // IDAT chunk
   const channels = hasAlpha ? 4 : 3;
   const rowSize = width * channels;
@@ -253,11 +287,11 @@ function encodePng(width: number, height: number, data: Uint8Array | Uint8Clampe
       scanlines[destOffset + i] = data[srcOffset + i];
     }
   }
-  
+
   const compressed = zlib.deflateSync(scanlines);
   const idatChunk = createChunk('IDAT', compressed);
   const iendChunk = createChunk('IEND', Buffer.alloc(0));
-  
+
   const pngBuffer = Buffer.concat([pngSignature, ihdrChunk, idatChunk, iendChunk]);
   return `data:image/png;base64,${pngBuffer.toString('base64')}`;
 }
@@ -268,29 +302,122 @@ function createChunk(type: string, data: Buffer): Buffer {
   chunk.writeUInt32BE(len, 0);
   chunk.write(type, 4, 4, 'ascii');
   data.copy(chunk, 8);
-  
+
   const crcVal = (zlib as any).crc32(chunk.slice(4, 8 + len));
   chunk.writeUInt32BE(crcVal, 8 + len);
   return chunk;
 }
 
 async function resolveYoutubeUrl(query: string): Promise<string> {
-  try {
-    const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      }
-    });
-    const html = await res.text();
-    const match = html.match(/"videoId":"([a-zA-Z0-9_-]{11})"/);
-    if (match) {
-      return `https://www.youtube.com/watch?v=${match[1]}`;
-    }
-  } catch (err) {
-    console.error('Failed to resolve YouTube URL for query:', query, err);
+  const cleanQuery = query.replace(/[▶▷►▼▽🎥🎬📺]/g, '').replace(/Watch Video Tutorial:/gi, '').trim();
+  const lowerQuery = cleanQuery.toLowerCase();
+
+  // Hardcoded mappings for high-quality standard tutorials
+  if (lowerQuery.includes('osi model') || lowerQuery.includes('osi reference model')) {
+    return 'https://www.youtube.com/watch?v=vv4y_uOneC0';
   }
-  return `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
+  if (lowerQuery.includes('topology') || lowerQuery.includes('topologies')) {
+    return 'https://www.youtube.com/watch?v=zbqrNg4C98U';
+  }
+  if (lowerQuery.includes('subnetting') || lowerQuery.includes('subnet')) {
+    return 'https://www.youtube.com/watch?v=sOqJ3Y84W5M';
+  }
+  if (lowerQuery.includes('ethernet')) {
+    return 'https://www.youtube.com/watch?v=F07S3l-m0wE';
+  }
+  if (lowerQuery.includes('packet tracer')) {
+    return 'https://www.youtube.com/watch?v=3qA5_d6vKco';
+  }
+  if (lowerQuery.includes('static routing') || lowerQuery.includes('static route')) {
+    return 'https://www.youtube.com/watch?v=UYw_6dMsc3E';
+  }
+  if (lowerQuery.includes('computer networking course') || lowerQuery.includes('complete networking curriculum')) {
+    return 'https://www.youtube.com/watch?v=S7MNX_UD7vY';
+  }
+  if (lowerQuery.includes('protocols') || lowerQuery.includes('protocols explained') || lowerQuery.includes('network protocols')) {
+    return 'https://www.youtube.com/watch?v=A2dD-s44mZ0';
+  }
+  if (lowerQuery.includes('tcp/ip') || lowerQuery.includes('tcp / ip') || lowerQuery.includes('tcp/ip protocol suite')) {
+    return 'https://www.youtube.com/watch?v=PpsEaqJV_A0';
+  }
+  if (lowerQuery.includes('structure of a network') || lowerQuery.includes('network structure')) {
+    return 'https://www.youtube.com/watch?v=3QhU9OrNHD8';
+  }
+  if (lowerQuery.includes('network models') || lowerQuery.includes('networking models')) {
+    return 'https://www.youtube.com/watch?v=vv4y_uOneC0';
+  }
+  if (lowerQuery.includes('standards and organizations') || lowerQuery.includes('networking standards') || lowerQuery.includes('standards')) {
+    return 'https://www.youtube.com/watch?v=Gj9qS8bAswE';
+  }
+  if (
+    lowerQuery.includes('what is a network') ||
+    lowerQuery.includes('ccna 200-301') ||
+    lowerQuery.includes('introduction to networking') ||
+    lowerQuery.includes('recommended video tutorial 1') ||
+    lowerQuery.includes('video tutorial 1')
+  ) {
+    return 'https://www.youtube.com/watch?v=H8W9oMNSuwo';
+  }
+  if (
+    lowerQuery.includes('lan vs wan') ||
+    lowerQuery.includes('lans and wans') ||
+    lowerQuery.includes('lan and wan') ||
+    lowerQuery.includes('recommended video tutorial 2') ||
+    lowerQuery.includes('video tutorial 2')
+  ) {
+    return 'https://www.youtube.com/watch?v=4_zSIXb7tLQ';
+  }
+
+  // Bypass slow, rate-limited server-side scraping.
+  // The frontend handles `yt-search:` prefix by rendering a clean YouTube search link dynamically.
+  return `yt-search:${cleanQuery}`;
+}
+
+function convertCmykToRgb(c: number, m: number, y: number, k: number): string {
+  const r = Math.round(255 * (1 - c) * (1 - k));
+  const g = Math.round(255 * (1 - m) * (1 - k));
+  const b = Math.round(255 * (1 - y) * (1 - k));
+  return `rgb(${r},${g},${b})`;
+}
+
+function isDarkColor(colorStr: string): boolean {
+  if (!colorStr) return false;
+  const clean = colorStr.trim().toLowerCase();
+  if (clean === 'none' || clean === 'transparent') return false;
+
+  let r = 255, g = 255, b = 255;
+  if (clean.startsWith('#')) {
+    const hex = clean.slice(1);
+    if (hex.length === 3) {
+      r = parseInt(hex[0] + hex[0], 16);
+      g = parseInt(hex[1] + hex[1], 16);
+      b = parseInt(hex[2] + hex[2], 16);
+    } else if (hex.length === 6) {
+      r = parseInt(hex.slice(0, 2), 16);
+      g = parseInt(hex.slice(2, 4), 16);
+      b = parseInt(hex.slice(4, 6), 16);
+    }
+  } else if (clean.startsWith('rgb')) {
+    const parts = clean.match(/\d+/g);
+    if (parts && parts.length >= 3) {
+      r = parseInt(parts[0], 10);
+      g = parseInt(parts[1], 10);
+      b = parseInt(parts[2], 10);
+    }
+  } else {
+    const darkNamedColors = ['black', 'navy', 'darkblue', 'indigo', 'maroon', 'purple', 'brown', 'darkgreen', 'blue', 'darkcyan', 'darkslategray', 'dimgray', 'gray', 'grey'];
+    if (darkNamedColors.includes(clean)) return true;
+    const lightNamedColors = ['white', 'yellow', 'cyan', 'lime', 'silver', 'lightgray', 'lightgrey'];
+    if (lightNamedColors.includes(clean)) return false;
+  }
+
+  // Calculate perceived brightness: HSP (highly sensitive perceived) color model
+  const hsp = Math.sqrt(
+    0.299 * (r * r) +
+    0.587 * (g * g) +
+    0.114 * (b * b)
+  );
+  return hsp < 170; // Brightness threshold (0-255). Lower is darker. Changed from 130 to 170 to catch colors like #3498db and #e67e22.
 }
 
 async function parsePdf(buffer: Buffer, defaultTitle: string): Promise<ParsedModule> {
@@ -315,11 +442,16 @@ async function parsePdf(buffer: Buffer, defaultTitle: string): Promise<ParsedMod
 
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
   // Explicitly load the matching 6.0.227 worker as a base64 data URL to prevent path and version mismatches
-  const path = require('path');
-  const fs = require('fs');
-  const workerPath = path.join(process.cwd(), 'node_modules', 'pdfjs-dist', 'legacy', 'build', 'pdf.worker.mjs');
-  const workerCode = fs.readFileSync(workerPath, 'utf8');
-  pdfjs.GlobalWorkerOptions.workerSrc = `data:text/javascript;base64,${Buffer.from(workerCode).toString('base64')}`;
+  if (!pdfjs.GlobalWorkerOptions.workerSrc) {
+    if (!cachedWorkerSrc) {
+      const path = require('path');
+      const fs = require('fs');
+      const workerPath = path.join(process.cwd(), 'node_modules', 'pdfjs-dist', 'legacy', 'build', 'pdf.worker.mjs');
+      const workerCode = fs.readFileSync(workerPath, 'utf8');
+      cachedWorkerSrc = `data:text/javascript;base64,${Buffer.from(workerCode).toString('base64')}`;
+    }
+    pdfjs.GlobalWorkerOptions.workerSrc = cachedWorkerSrc;
+  }
   const doc = await pdfjs.getDocument({ data: new Uint8Array(buffer) }).promise;
 
   interface ExtractedLine {
@@ -342,9 +474,12 @@ async function parsePdf(buffer: Buffer, defaultTitle: string): Promise<ParsedMod
   const allElements: ExtractedElement[] = [];
   const allFontSizes: number[] = [];
 
-  for (let pageNum = 1; pageNum <= doc.numPages; pageNum++) {
+  const pagePromises = Array.from({ length: doc.numPages }, (_, i) => i + 1).map(async (pageNum) => {
     const page = await doc.getPage(pageNum);
-    
+    const viewport = page.getViewport({ scale: 1.0 });
+    const pageWidth = viewport.width;
+    const pageHeight = viewport.height;
+
     // 1. Extract text items and group into lines
     const textContent = await page.getTextContent();
 
@@ -352,13 +487,14 @@ async function parsePdf(buffer: Buffer, defaultTitle: string): Promise<ParsedMod
       str: item.str,
       x: item.transform[4],
       y: item.transform[5],
-      fontSize: Math.abs(item.transform[3])
+      fontSize: Math.abs(item.transform[3]),
+      width: item.width || 0
     }));
 
     const linesMap = new Map<number, typeof items>();
     for (const item of items) {
       if (item.str.trim() === '') continue;
-      
+
       let foundYKey: number | null = null;
       for (const existingY of linesMap.keys()) {
         if (Math.abs(existingY - item.y) <= 3.5) {
@@ -366,7 +502,7 @@ async function parsePdf(buffer: Buffer, defaultTitle: string): Promise<ParsedMod
           break;
         }
       }
-      
+
       if (foundYKey !== null) {
         linesMap.get(foundYKey)!.push(item);
       } else {
@@ -375,11 +511,14 @@ async function parsePdf(buffer: Buffer, defaultTitle: string): Promise<ParsedMod
     }
 
     const pageLines: ExtractedLine[] = [];
+    const pageFontSizes: number[] = [];
     for (const [y, lineItems] of linesMap.entries()) {
       lineItems.sort((a, b) => a.x - b.x);
       const text = lineItems.map(item => item.str).join(' ').replace(/\s+/g, ' ').trim();
       const maxFontSize = Math.max(...lineItems.map(item => item.fontSize));
-      if (text.length > 0) {
+      // Filter out page numbers (purely numeric lines near top/bottom margins)
+      const isPageNumber = /^\d+$/.test(text) && (y < 50 || y > pageHeight - 50);
+      if (text.length > 0 && !isPageNumber) {
         pageLines.push({
           type: 'text',
           text,
@@ -387,55 +526,273 @@ async function parsePdf(buffer: Buffer, defaultTitle: string): Promise<ParsedMod
           fontSize: maxFontSize,
           pageNum
         });
-        allFontSizes.push(maxFontSize);
+        pageFontSizes.push(maxFontSize);
       }
     }
 
     // 2. Extract images with coordinates
     const opList = await page.getOperatorList();
     const pageImages: ExtractedImage[] = [];
-    
+
     let currentTransform = [1, 0, 0, 1, 0, 0];
     const transformStack: number[][] = [];
+
+    // Vector graphics tracking
+    let fillColor = '#000000';
+    let strokeColor = '#000000';
+    let lineWidth = 1.0;
+    let lineCap = 'butt';
+    let lineJoin = 'miter';
+    const stateStack: { fillColor: string; strokeColor: string; lineWidth: number; lineCap: string; lineJoin: string }[] = [];
+
+    interface VectorShape {
+      pathType: number;
+      pathOps: number[];
+      rawBBox: number[] | null;
+      tbBox: number[] | null;
+      fillColor: string;
+      strokeColor: string;
+      lineWidth: number;
+      lineCap: string;
+      lineJoin: string;
+      ctm: number[];
+    }
+
+    const shapes: VectorShape[] = [];
+
+    const shouldSkipCluster = (
+      clusterShapes: VectorShape[],
+      inlineTexts: any[],
+      width: number,
+      height: number
+    ): boolean => {
+      // Skip horizontal divider lines (single thin shape spanning almost full page width with no text)
+      if (clusterShapes.length === 1 && inlineTexts.length === 0) {
+        if (width >= pageWidth - 120 && height < 35) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+    const saveState = () => {
+      transformStack.push([...currentTransform]);
+      stateStack.push({ fillColor, strokeColor, lineWidth, lineCap, lineJoin });
+    };
+
+    const restoreState = () => {
+      if (transformStack.length > 0) currentTransform = transformStack.pop()!;
+      if (stateStack.length > 0) {
+        const state = stateStack.pop()!;
+        fillColor = state.fillColor;
+        strokeColor = state.strokeColor;
+        lineWidth = state.lineWidth;
+        lineCap = state.lineCap;
+        lineJoin = state.lineJoin;
+      }
+    };
+
+    const multiplyMatrix = (m1: number[], m2: number[]) => [
+      m1[0] * m2[0] + m1[2] * m2[1],
+      m1[1] * m2[0] + m1[3] * m2[1],
+      m1[0] * m2[2] + m1[2] * m2[3],
+      m1[1] * m2[2] + m1[3] * m2[3],
+      m1[0] * m2[4] + m1[2] * m2[5] + m1[4],
+      m1[1] * m2[4] + m1[3] * m2[5] + m1[5]
+    ];
+
+    const getTransformedBBox = (rawBBox: number[] | null, ctm: number[]) => {
+      if (!rawBBox) return null;
+      const [xMin, yMin, xMax, yMax] = rawBBox;
+      const corners = [
+        [xMin, yMin],
+        [xMax, yMin],
+        [xMin, yMax],
+        [xMax, yMax]
+      ];
+      let txMin = Infinity, tyMin = Infinity, txMax = -Infinity, tyMax = -Infinity;
+      for (const [x, y] of corners) {
+        const tx = ctm[0] * x + ctm[2] * y + ctm[4];
+        const ty = ctm[1] * x + ctm[3] * y + ctm[5];
+        txMin = Math.min(txMin, tx);
+        tyMin = Math.min(tyMin, ty);
+        txMax = Math.max(txMax, tx);
+        tyMax = Math.max(tyMax, ty);
+      }
+      return [txMin, tyMin, txMax, tyMax];
+    };
+
+    const getRawBBoxFromOps = (pathOps: any): number[] | null => {
+      if (!pathOps || pathOps.length === 0) return null;
+      let xMin = Infinity, yMin = Infinity, xMax = -Infinity, yMax = -Infinity;
+      let hasPoints = false;
+
+      const addPoint = (x: number, y: number) => {
+        if (isNaN(x) || isNaN(y)) return;
+        xMin = Math.min(xMin, x);
+        yMin = Math.min(yMin, y);
+        xMax = Math.max(xMax, x);
+        yMax = Math.max(yMax, y);
+        hasPoints = true;
+      };
+
+      const len = pathOps.length || Object.keys(pathOps).length;
+      for (let i = 0; i < len;) {
+        const op = pathOps[i++];
+        if (op === 0) { // moveTo
+          addPoint(pathOps[i++], pathOps[i++]);
+        } else if (op === 1) { // lineTo
+          addPoint(pathOps[i++], pathOps[i++]);
+        } else if (op === 2) { // bezierCurveTo
+          addPoint(pathOps[i++], pathOps[i++]);
+          addPoint(pathOps[i++], pathOps[i++]);
+          addPoint(pathOps[i++], pathOps[i++]);
+        } else if (op === 3) { // quadraticCurveTo
+          addPoint(pathOps[i++], pathOps[i++]);
+          addPoint(pathOps[i++], pathOps[i++]);
+        } else if (op === 4) {
+          // closePath
+        } else {
+          break;
+        }
+      }
+      return hasPoints ? [xMin, yMin, xMax, yMax] : null;
+    };
 
     for (let j = 0; j < opList.fnArray.length; j++) {
       const fn = opList.fnArray[j];
       const args = opList.argsArray[j];
-      
-      if (fn === pdfjs.OPS.save) {
-        transformStack.push([...currentTransform]);
-      } else if (fn === pdfjs.OPS.restore) {
-        if (transformStack.length > 0) {
-          currentTransform = transformStack.pop()!;
+
+      if (fn === pdfjs.OPS.save || fn === pdfjs.OPS.beginGroup || fn === pdfjs.OPS.paintFormXObjectBegin) {
+        saveState();
+        if (fn === pdfjs.OPS.beginGroup && args && args[0] && args[0].matrix) {
+          currentTransform = multiplyMatrix(currentTransform, args[0].matrix);
         }
+      } else if (fn === pdfjs.OPS.restore || fn === pdfjs.OPS.endGroup || fn === pdfjs.OPS.paintFormXObjectEnd) {
+        restoreState();
       } else if (fn === pdfjs.OPS.transform) {
-        const [a1, b1, c1, d1, e1, f1] = args;
-        const [a2, b2, c2, d2, e2, f2] = currentTransform;
-        currentTransform = [
-          a2 * a1 + c2 * b1,
-          b2 * a1 + d2 * b1,
-          a2 * c1 + c2 * d1,
-          b2 * c1 + d2 * d1,
-          a2 * e1 + c2 * f1 + e2,
-          b2 * e1 + d2 * f1 + f2
-        ];
+        currentTransform = multiplyMatrix(currentTransform, args);
+      } else if (fn === pdfjs.OPS.setFillRGBColor) {
+        if (args && args.length >= 3) {
+          const r = Math.round(args[0] * 255);
+          const g = Math.round(args[1] * 255);
+          const b = Math.round(args[2] * 255);
+          fillColor = `rgb(${r},${g},${b})`;
+        } else {
+          fillColor = args[0];
+        }
+      } else if (fn === pdfjs.OPS.setStrokeRGBColor) {
+        if (args && args.length >= 3) {
+          const r = Math.round(args[0] * 255);
+          const g = Math.round(args[1] * 255);
+          const b = Math.round(args[2] * 255);
+          strokeColor = `rgb(${r},${g},${b})`;
+        } else {
+          strokeColor = args[0];
+        }
+      } else if (fn === pdfjs.OPS.setFillGray) {
+        const val = typeof args[0] === 'number' ? Math.round(args[0] * 255) : 0;
+        fillColor = `rgb(${val},${val},${val})`;
+      } else if (fn === pdfjs.OPS.setStrokeGray) {
+        const val = typeof args[0] === 'number' ? Math.round(args[0] * 255) : 0;
+        strokeColor = `rgb(${val},${val},${val})`;
+      } else if (fn === pdfjs.OPS.setFillCMYKColor) {
+        if (args && args.length >= 4) {
+          fillColor = convertCmykToRgb(args[0], args[1], args[2], args[3]);
+        }
+      } else if (fn === pdfjs.OPS.setStrokeCMYKColor) {
+        if (args && args.length >= 4) {
+          strokeColor = convertCmykToRgb(args[0], args[1], args[2], args[3]);
+        }
+      } else if (fn === pdfjs.OPS.setFillColor || fn === pdfjs.OPS.setFillColorN) {
+        if (args && args.length >= 4) {
+          fillColor = convertCmykToRgb(args[0], args[1], args[2], args[3]);
+        } else if (args && args.length === 3) {
+          const r = Math.round(args[0] * 255);
+          const g = Math.round(args[1] * 255);
+          const b = Math.round(args[2] * 255);
+          fillColor = `rgb(${r},${g},${b})`;
+        } else if (args && args.length === 1) {
+          const val = typeof args[0] === 'number' ? Math.round(args[0] * 255) : 0;
+          fillColor = `rgb(${val},${val},${val})`;
+        }
+      } else if (fn === pdfjs.OPS.setStrokeColor || fn === pdfjs.OPS.setStrokeColorN) {
+        if (args && args.length >= 4) {
+          strokeColor = convertCmykToRgb(args[0], args[1], args[2], args[3]);
+        } else if (args && args.length === 3) {
+          const r = Math.round(args[0] * 255);
+          const g = Math.round(args[1] * 255);
+          const b = Math.round(args[2] * 255);
+          strokeColor = `rgb(${r},${g},${b})`;
+        } else if (args && args.length === 1) {
+          const val = typeof args[0] === 'number' ? Math.round(args[0] * 255) : 0;
+          strokeColor = `rgb(${val},${val},${val})`;
+        }
+      } else if (fn === pdfjs.OPS.setLineWidth) {
+        lineWidth = args[0];
+      } else if (fn === pdfjs.OPS.setLineCap) {
+        const caps = ['butt', 'round', 'square'];
+        lineCap = caps[args[0]] || 'butt';
+      } else if (fn === pdfjs.OPS.setLineJoin) {
+        const joins = ['miter', 'round', 'bevel'];
+        lineJoin = joins[args[0]] || 'miter';
+      } else if (fn === pdfjs.OPS.constructPath) {
+        const pathType = args[0];
+        const pathOps = args[1] ? args[1][0] : null;
+
+        if (pathOps) {
+          let rawBBox = args[2] ? [args[2][0], args[2][1], args[2][2], args[2][3]] : null;
+          if (!rawBBox) {
+            rawBBox = getRawBBoxFromOps(pathOps);
+          }
+          const tbBox = getTransformedBBox(rawBBox, currentTransform);
+          shapes.push({
+            pathType,
+            pathOps,
+            rawBBox,
+            tbBox,
+            fillColor,
+            strokeColor,
+            lineWidth,
+            lineCap,
+            lineJoin,
+            ctm: [...currentTransform]
+          });
+        } else if (shapes.length > 0) {
+          shapes[shapes.length - 1].pathType = pathType;
+        }
       } else if (fn === pdfjs.OPS.paintImageXObject) {
         const objId = args[0];
         const x = currentTransform[4];
         const y = currentTransform[5];
-        
+
         try {
           const imgObj = await new Promise<any>((resolve) => {
+            let resolved = false;
+            const timeout = setTimeout(() => {
+              if (!resolved) {
+                resolved = true;
+                resolve(null);
+              }
+            }, 150); // 150ms timeout to prevent hanging on unresolved PDF.js resources
+
             page.objs.get(objId, (obj: any) => {
-              if (obj) resolve(obj);
-              else {
+              if (resolved) return;
+              if (obj) {
+                resolved = true;
+                clearTimeout(timeout);
+                resolve(obj);
+              } else {
                 page.commonObjs.get(objId, (cObj: any) => {
+                  if (resolved) return;
+                  resolved = true;
+                  clearTimeout(timeout);
                   resolve(cObj);
                 });
               }
             });
           });
-          
+
           if (imgObj && imgObj.width >= 50 && imgObj.height >= 50 && imgObj.data) {
             const base64 = encodePng(imgObj.width, imgObj.height, imgObj.data);
             pageImages.push({
@@ -451,10 +808,257 @@ async function parsePdf(buffer: Buffer, defaultTitle: string): Promise<ParsedMod
       }
     }
 
+    // Process extracted vector shapes and build SVG diagrams
+    const diagramShapes = shapes.filter(s => {
+      if (!s.tbBox) return false;
+      if (s.pathType === 28) return false;
+
+      const [xMin, yMin, xMax, yMax] = s.tbBox;
+      const width = xMax - xMin;
+      const height = yMax - yMin;
+
+      if (xMin <= 10 && yMin <= 10 && xMax >= pageWidth - 10 && yMax >= pageHeight - 10) {
+        return false;
+      }
+
+      if (Math.abs(width - (pageWidth - 85)) < 30 && Math.abs(height - (pageHeight - 110)) < 30) {
+        return false;
+      }
+
+      if (width >= pageWidth - 45) {
+        if (yMin >= pageHeight - 170) return false;
+        if (yMax <= 170) return false;
+      }
+
+      if (width >= pageWidth - 95 && height < 50) {
+        return false;
+      }
+
+      if (yMin >= pageHeight - 60 || yMax <= 60) {
+        return false;
+      }
+
+      if (width > 300 && height < 95) {
+        if (yMin >= pageHeight - 120 || yMax <= 120) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+
+    // Spatial clustering of shapes
+    const clusters: VectorShape[][] = [];
+    for (const s of diagramShapes) {
+      let placed = false;
+      for (const cluster of clusters) {
+        const isClose = cluster.some(c => {
+          const [cx0, cy0, cx1, cy1] = c.tbBox!;
+          const [sx0, sy0, sx1, sy1] = s.tbBox!;
+
+          const xOverlap = Math.max(0, Math.min(cx1, sx1) - Math.max(cx0, sx0)) > 0 ||
+            Math.abs(cx0 - sx0) < 40 || Math.abs(cx1 - sx1) < 40;
+          const yOverlap = Math.max(0, Math.min(cy1, sy1) - Math.max(cy0, sy0)) > 0 ||
+            Math.abs(cy0 - sy0) < 45 || Math.abs(cy1 - sy1) < 45;
+          return xOverlap && yOverlap;
+        });
+        if (isClose) {
+          cluster.push(s);
+          placed = true;
+          break;
+        }
+      }
+      if (!placed) {
+        clusters.push([s]);
+      }
+    }
+
+    for (const clusterShapes of clusters) {
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const s of clusterShapes) {
+        const [x0, y0, x1, y1] = s.tbBox!;
+        minX = Math.min(minX, x0);
+        minY = Math.min(minY, y0);
+        maxX = Math.max(maxX, x1);
+        maxY = Math.max(maxY, y1);
+      }
+
+      const margin = 15;
+      minX -= margin;
+      minY -= margin;
+      maxX += margin;
+      maxY += margin;
+
+      const width = maxX - minX;
+      const height = maxY - minY;
+
+      if (width > 50 && height > 50) {
+        // Exclude simple horizontal banner boxes (like heading backgrounds)
+        if (clusterShapes.length <= 3 && width > 300 && height < 95) {
+          // Skip header background box
+        } else {
+          // Filter text items inside diagram bounds to validate layout
+          const inlineTexts = items.filter(t => t.x >= minX && t.x <= maxX && t.y >= minY && t.y <= maxY && t.str.trim() !== '');
+
+          if (shouldSkipCluster(clusterShapes, inlineTexts, width, height)) {
+            // Skip simple non-diagram clusters (like text boxes, divider lines, and page borders)
+          } else {
+
+          // Exclude text-heavy blocks, recap/summary panels, tables, or video watch callouts
+          // Figure captions are ignored in length checks to prevent discarding diagrams
+          const hasLongText = inlineTexts.some(t => {
+            const s = t.str.trim();
+            if (/^Figure\s*\d+/i.test(s)) return false;
+            return s.length >= 130;
+          });
+          const isTooDense = inlineTexts.length > 35;
+          const hasVideoKeyword = inlineTexts.some(t => {
+            const s = t.str.toLowerCase();
+            const hasPlayIcon = t.str.includes('▶') || t.str.includes('📺');
+            const hasWatchCallout = s.includes('watch') && s.includes('video');
+            const hasRecommended = s.includes('recommended') && s.includes('video');
+            const hasTutorial = s.includes('tutorial');
+            const hasSummaryRecap = s.includes('recap') || s.includes('summary');
+            return hasPlayIcon || hasWatchCallout || hasRecommended || hasTutorial || hasSummaryRecap;
+          });
+
+          if (!hasLongText && !isTooDense && !hasVideoKeyword) {
+            const pathOpsToSvgD = (data: number[]) => {
+              let d = "";
+              for (let i = 0; i < data.length;) {
+                const op = data[i++];
+                if (op === 0) {
+                  d += `M ${data[i++]} ${data[i++]} `;
+                } else if (op === 1) {
+                  d += `L ${data[i++]} ${data[i++]} `;
+                } else if (op === 2) {
+                  d += `C ${data[i++]} ${data[i++]} ${data[i++]} ${data[i++]} ${data[i++]} ${data[i++]} `;
+                } else if (op === 3) {
+                  d += `Q ${data[i++]} ${data[i++]} ${data[i++]} ${data[i++]} `;
+                } else if (op === 4) {
+                  d += `Z `;
+                } else {
+                  break;
+                }
+              }
+              return d.trim();
+            };
+
+            const escapeHtml = (unsafe: string) => {
+              return unsafe
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+            };
+
+            const svgElements: string[] = [];
+            for (const s of clusterShapes) {
+              const d = pathOpsToSvgD(s.pathOps);
+              if (!d) continue;
+
+              const isStroked = [20, 21, 24, 25, 26, 27].includes(s.pathType);
+              const isFilled = [22, 23, 24, 25, 26, 27].includes(s.pathType);
+              const isEvenOdd = [23, 25, 27].includes(s.pathType);
+
+              const strokeVal = isStroked ? s.strokeColor : 'none';
+              const fillVal = isFilled ? s.fillColor : 'none';
+              const fillRuleVal = isEvenOdd ? ' fill-rule="evenodd"' : '';
+              const strokeWidthVal = isStroked ? ` stroke-width="${s.lineWidth}"` : '';
+              const strokeLineCap = isStroked ? ` stroke-linecap="${s.lineCap}"` : '';
+              const strokeLineJoin = isStroked ? ` stroke-linejoin="${s.lineJoin}"` : '';
+
+              const ctmStr = `matrix(${s.ctm.join(', ')})`;
+              svgElements.push(
+                `    <g transform="${ctmStr}">\n` +
+                `      <path d="${d}" fill="${fillVal}" stroke="${strokeVal}"${fillRuleVal}${strokeWidthVal}${strokeLineCap}${strokeLineJoin} />\n` +
+                `    </g>`
+              );
+            }
+
+            const svgTextElements: string[] = [];
+            for (const t of inlineTexts) {
+              const svgX = t.x;
+              const svgY = pageHeight - t.y;
+              
+              // Determine text color based on background shapes using AABB intersection
+              let textColor = "#e2e8f0"; // Default light text for dark mode SVG background
+              const textWidth = t.width || (t.str.length * t.fontSize * 0.55);
+              const textHeight = t.fontSize;
+              
+              let topShape: typeof clusterShapes[0] | null = null;
+              const padding = 3; // 3px tolerance
+              for (const s of clusterShapes) {
+                if (s.tbBox && [22, 23, 24, 25, 26, 27].includes(s.pathType)) { // isFilled
+                  const [sx0, sy0, sx1, sy1] = s.tbBox;
+                  const textX0 = t.x;
+                  const textY0 = t.y;
+                  const textX1 = t.x + textWidth;
+                  const textY1 = t.y + textHeight;
+
+                  const overlapX = Math.max(0, Math.min(textX1, sx1) - Math.max(textX0, sx0)) > 0 ||
+                                   (textX0 >= sx0 - padding && textX1 <= sx1 + padding);
+                  const overlapY = Math.max(0, Math.min(textY1, sy1) - Math.max(textY0, sy0)) > 0 ||
+                                   (textY0 >= sy0 - padding && textY1 <= sy1 + padding);
+
+                  if (overlapX && overlapY) {
+                    topShape = s; // Sorted chronologically: last matching shape is on top
+                  }
+                }
+              }
+              
+              if (topShape) {
+                if (isDarkColor(topShape.fillColor)) {
+                  textColor = "#ffffff"; // White text on dark background
+                } else {
+                  textColor = "#0f172a"; // Dark text on light background
+                }
+              }
+              
+              svgTextElements.push(
+                `  <text x="${svgX}" y="${svgY}" font-size="${t.fontSize}" fill="${textColor}" font-weight="500">${escapeHtml(t.str)}</text>`
+              );
+            }
+
+            const svg =
+              `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${minX} ${pageHeight - maxY} ${width} ${height}" width="${width}" height="${height}">\n` +
+              `  <rect x="${minX}" y="${pageHeight - maxY}" width="${width}" height="${height}" fill="#121b27" rx="8" stroke="#1f2937" stroke-width="1" />\n` +
+              `  <g transform="scale(1, -1) translate(0, -${pageHeight})">\n` +
+              svgElements.join('\n') + '\n' +
+              `  </g>\n` +
+              `  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">\n` +
+              svgTextElements.join('\n') + '\n' +
+              `  </g>\n` +
+              `</svg>`;
+
+            const svgBase64 = `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
+            pageImages.push({
+              type: 'image',
+              content: svgBase64,
+              y: maxY,
+              pageNum
+            });
+          }
+        }
+      }
+    }
+  }
+
     const pageElements: ExtractedElement[] = [...pageLines, ...pageImages];
     // Sort elements by Y coordinate descending (top to bottom of page)
     pageElements.sort((a, b) => b.y - a.y);
-    allElements.push(...pageElements);
+
+    return {
+      pageElements,
+      pageFontSizes
+    };
+  });
+
+  const pageResults = await Promise.all(pagePromises);
+  for (const res of pageResults) {
+    allElements.push(...res.pageElements);
+    allFontSizes.push(...res.pageFontSizes);
   }
 
   // Analyze font statistics
@@ -470,6 +1074,23 @@ async function parsePdf(buffer: Buffer, defaultTitle: string): Promise<ParsedMod
     maxShortLineFontSize = Math.max(...shortLines.map(l => l.fontSize));
   }
 
+  // Detect title lines: Page 1, large font size (e.g. maxShortLineFontSize or > bodyFontSize + 8)
+  const isTitleLine = (el: ExtractedElement) => {
+    return (
+      el.type === 'text' &&
+      el.pageNum === 1 &&
+      el.fontSize >= maxShortLineFontSize - 1.0 &&
+      maxShortLineFontSize > bodyFontSize + 8
+    );
+  };
+
+  // Find max font size of non-title short lines
+  const nonTitleShortLines = shortLines.filter(el => !isTitleLine(el));
+  let topicHeadingFontSize = maxShortLineFontSize;
+  if (nonTitleShortLines.length > 0) {
+    topicHeadingFontSize = Math.max(...nonTitleShortLines.map(l => l.fontSize));
+  }
+
   const classifiedElements = allElements.map((el) => {
     if (el.type === 'image') {
       return {
@@ -478,25 +1099,60 @@ async function parsePdf(buffer: Buffer, defaultTitle: string): Promise<ParsedMod
         isSubtopic: false
       };
     }
-    
-    const lineText = el.text;
-    const isTopic = (
-      // Literal topic match
-      (/^Topic\s*\d*/i.test(lineText) && lineText.length < 80) ||
-      // Strictly match only the largest font size (Heading 1) in the document!
-      (
-        maxShortLineFontSize > bodyFontSize + 2.5 &&
-        el.fontSize >= maxShortLineFontSize - 0.5 &&
-        lineText.length < 80 &&
-        /[a-zA-Z]/.test(lineText) &&
-        !/^[0-9\s.,\/#!$%\^&\*;:{}=\-_`~()]+$/.test(lineText)
-      )
-    );
 
+    const lineText = el.text;
+    const cleanText = lineText.trim().replace(/\s+/g, ' ');
+    const upperText = cleanText.toUpperCase();
+
+    // Check if it is a reference or summary header to exclude them
+    const isExcludedHeader = (upperText.startsWith('SUMMARY') && cleanText.length < 28) || upperText === 'REFERENCES' || upperText === 'BIBLIOGRAPHY' || (upperText.startsWith('REFERENCE') && cleanText.length < 20);
+
+    const cleanUpper = upperText.replace(/[📺▶🎥🎬▼▽►]/g, '').trim();
+    const isGenericVideoHeader = cleanUpper === 'RECOMMENDED VIDEO TUTORIAL' || cleanUpper === 'WATCH VIDEO TUTORIAL' || cleanUpper === 'VIDEO TUTORIAL' || cleanUpper === 'WATCH VIDEO' || cleanUpper.includes('VIDEO RESOURCE SPOTLIGHT');
+    const hasVideoCallout = !isGenericVideoHeader && (upperText.includes('WATCH VIDEO') || upperText.includes('VIDEO TUTORIAL') || upperText.includes('VIDEO RESOURCE') || cleanText.includes('▶') || cleanText.includes('📺') || extractYoutubeUrl(cleanText) !== null);
+
+    let isTopic = false;
+ 
+    if (!isExcludedHeader && !isTitleLine(el) && !hasVideoCallout) {
+      // 1. Check if it matches numbered headings (e.g. "1. Topic Name") - must NOT be sub-numbered (no 1.1)
+      const isNumberedHeading = (/^\d+\.\s+[a-zA-Z]/i.test(cleanText) && el.fontSize > bodyFontSize + 1.5 && cleanText.length < 80);
+ 
+      const isSubtopicPattern = /^\d+\.\d+/i.test(cleanText);
+ 
+      // 2. Check if it matches the main headings (fontSize close to 18/17, or close to topicHeadingFontSize)
+      // Must not match a subtopic pattern
+      const isMainHeading = (
+        !isSubtopicPattern &&
+        ((Math.abs(el.fontSize - 18.0) < 0.5 || Math.abs(el.fontSize - 17.0) < 0.5) || 
+         (Math.abs(el.fontSize - topicHeadingFontSize) < 1.0 && el.fontSize >= bodyFontSize + 1.8)) &&
+        cleanText.length < 80 && 
+        /[a-zA-Z]/.test(cleanText) && 
+        !/^[0-9\s.,\/#!$%\^&\*;:{}=\-_`~()]+$/.test(cleanText)
+      );
+ 
+      // 3. Check if it matches the specific sub-headings for OSI and TCP/IP
+      const isModelSubheading = (el.fontSize > bodyFontSize + 2 && cleanText.length < 80 && (upperText.includes('OSI REFERENCE MODEL') || upperText.includes('TCP/IP PROTOCOL SUITE')));
+ 
+      // 4. Generic fallback rule
+      const isGenericTopic = (/^Topic\s*\d*/i.test(cleanText) && cleanText.length < 80);
+ 
+      const satisfiesBaseRules = isMainHeading || isNumberedHeading || isModelSubheading || isGenericTopic;
+
+      if (satisfiesBaseRules) {
+        if (el.pageNum === 1) {
+          const isAllCaps = cleanText === cleanText.toUpperCase() && /[A-Z]/.test(cleanText);
+          isTopic = isNumberedHeading || isGenericTopic || isAllCaps;
+        } else {
+          isTopic = true;
+        }
+      }
+    }
+ 
     return {
       ...el,
       isTopic,
-      isSubtopic: false
+      isSubtopic: false,
+      isExcludedHeader
     };
   });
 
@@ -529,36 +1185,45 @@ async function parsePdf(buffer: Buffer, defaultTitle: string): Promise<ParsedMod
 
     const lineText = el.text;
     const ytUrl = extractYoutubeUrl(lineText);
-    
+
     if (ytUrl !== null) {
       el.isVideo = true;
     } else {
-      const isShortTitleLike = lineText.length < 90 && lineText.length > 5 &&
-        !/[.!?]$/.test(lineText) &&
-        !/^\d/.test(lineText) &&
-        !/^●/.test(lineText) &&
-        !/^\$/.test(lineText);
+      const upperText = lineText.toUpperCase();
+      const cleanUpper = upperText.replace(/[📺▶🎥🎬▼▽►]/g, '').trim();
+      const isGenericVideoHeader = cleanUpper === 'RECOMMENDED VIDEO TUTORIAL' || cleanUpper === 'WATCH VIDEO TUTORIAL' || cleanUpper === 'VIDEO TUTORIAL' || cleanUpper === 'WATCH VIDEO' || cleanUpper.includes('VIDEO RESOURCE SPOTLIGHT');
+      const hasVideoCallout = !isGenericVideoHeader && (upperText.includes('WATCH VIDEO') || upperText.includes('VIDEO TUTORIAL') || lineText.includes('▶') || lineText.includes('📺'));
 
-      if (isShortTitleLike) {
-        let nextIsTopic = false;
-        let isLastTextEl = true;
-        for (let j = i + 1; j < mergedElements.length; j++) {
-          if (mergedElements[j].type === 'text') {
-            isLastTextEl = false;
-            if (mergedElements[j].isTopic) {
-              nextIsTopic = true;
+      if (hasVideoCallout) {
+        el.isVideo = true;
+      } else {
+        const isShortTitleLike = lineText.length < 90 && lineText.length > 5 &&
+          !/[.!?]$/.test(lineText) &&
+          !/^\d/.test(lineText) &&
+          !/^●/.test(lineText) &&
+          !/^\$/.test(lineText);
+
+        if (isShortTitleLike) {
+          let nextIsTopic = false;
+          let isLastTextEl = true;
+          for (let j = i + 1; j < mergedElements.length; j++) {
+            if (mergedElements[j].type === 'text') {
+              isLastTextEl = false;
+              if (mergedElements[j].isTopic || mergedElements[j].isExcludedHeader) {
+                nextIsTopic = true;
+              }
+              break;
             }
-            break;
           }
-        }
-        
-        if (nextIsTopic || isLastTextEl) {
-          el.isVideo = true;
+
+          if (nextIsTopic || isLastTextEl) {
+            el.isVideo = true;
+          } else {
+            el.isVideo = false;
+          }
         } else {
           el.isVideo = false;
         }
-      } else {
-        el.isVideo = false;
       }
     }
   }
@@ -579,12 +1244,12 @@ async function parsePdf(buffer: Buffer, defaultTitle: string): Promise<ParsedMod
     const textContent = textBuffer.join('\n\n').trim();
     textBuffer = [];
     if (!textContent) return;
-    
+
     const material: Material = {
       id: Date.now() + Math.floor(Math.random() * 1000000),
       type: 'text',
       title: 'Lecture Reading',
-      content: textContent,
+      content: formatLearningMaterialHtml(textContent),
       textStyle: 'normal'
     };
     addMaterialToCurrent(material);
@@ -593,24 +1258,24 @@ async function parsePdf(buffer: Buffer, defaultTitle: string): Promise<ParsedMod
   const appendToParagraph = (el: any) => {
     const text = el.text.trim();
     if (!text) return;
-    
+
     if (!currentParagraph) {
       currentParagraph = text;
     } else {
       let shouldStartNew = false;
-      
+
       if (lastTextEl) {
         const gap = lastTextEl.y - el.y;
         const samePage = lastTextEl.pageNum === el.pageNum;
         const fontSize = lastTextEl.fontSize || 10;
-        
+
         if (!samePage) {
           // Page boundary: only start new if previous line ends with sentence punctuation
           const lastChar = currentParagraph.slice(-1);
           if (/[.!?]/.test(lastChar)) {
             shouldStartNew = true;
           }
-        } else if (gap > fontSize * 1.75) {
+        } else if (gap > fontSize * 2.8) {
           // Significant vertical gap
           shouldStartNew = true;
         } else if (currentParagraph.length > 0) {
@@ -621,7 +1286,7 @@ async function parsePdf(buffer: Buffer, defaultTitle: string): Promise<ParsedMod
           }
         }
       }
-      
+
       if (shouldStartNew) {
         textBuffer.push(currentParagraph.trim());
         currentParagraph = text;
@@ -636,17 +1301,14 @@ async function parsePdf(buffer: Buffer, defaultTitle: string): Promise<ParsedMod
     lastTextEl = el;
   };
 
+  const initialMaterials: Material[] = [];
+
   const addMaterialToCurrent = (material: Material) => {
-    if (!currentTopic) {
-      currentTopic = {
-        id: Date.now() + Math.floor(Math.random() * 1000000),
-        title: 'Introduction',
-        subtopics: [],
-        materials: []
-      };
-      topics.push(currentTopic);
+    if (currentTopic) {
+      currentTopic.materials.push(material);
+    } else {
+      initialMaterials.push(material);
     }
-    currentTopic.materials.push(material);
   };
 
   for (const el of mergedElements) {
@@ -662,6 +1324,13 @@ async function parsePdf(buffer: Buffer, defaultTitle: string): Promise<ParsedMod
       addMaterialToCurrent(material);
     } else {
       const lineText = el.text;
+      const upperText = lineText.toUpperCase();
+
+      // STRICT REFERENCE CHECK TO STOP PARSING
+      if (upperText === 'REFERENCES' || upperText === 'BIBLIOGRAPHY' || (upperText.startsWith('REFERENCE') && lineText.trim().length < 20)) {
+        break;
+      }
+
       if (el.isTopic) {
         flushTextBuffer();
         currentTopic = {
@@ -670,6 +1339,10 @@ async function parsePdf(buffer: Buffer, defaultTitle: string): Promise<ParsedMod
           subtopics: [],
           materials: []
         };
+        if (initialMaterials.length > 0) {
+          currentTopic.materials.push(...initialMaterials);
+          initialMaterials.length = 0;
+        }
         topics.push(currentTopic);
       } else if (el.isVideo) {
         flushTextBuffer();

@@ -45,6 +45,12 @@
   --font-mono: var(--font-geist-mono);
 }
 
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
@@ -123,4 +129,13 @@ body {
 .preload,
 .preload * {
   transition: none !important;
+}
+
+/* Placeholder styling for visual contenteditable editor */
+[contenteditable]:empty::before {
+  content: attr(data-placeholder);
+  color: var(--color-brand-muted, #94a3b8);
+  opacity: 0.5;
+  pointer-events: none;
+  display: block;
 }

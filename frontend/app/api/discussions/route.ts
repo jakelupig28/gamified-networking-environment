@@ -43,14 +43,14 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { moduleId, email, name, message, isWarning } = body;
+    const { moduleId, email, name, message, isWarning, title, parentId } = body;
     const targetModuleId = moduleId !== undefined ? parseInt(moduleId) : 0;
 
     if (!email || !name || !message || !message.trim()) {
       return NextResponse.json({ success: false, message: 'Missing fields' }, { status: 400 });
     }
 
-    if (containsRestrictedWords(message)) {
+    if (containsRestrictedWords(message) || (title && containsRestrictedWords(title))) {
       return NextResponse.json({ 
         success: false, 
         message: 'Your message contains prohibited or inappropriate content and was blocked by the system moderation filter.' 
@@ -80,6 +80,8 @@ export async function POST(req: Request) {
       role,
       message: message.trim(),
       isWarning: targetIsWarning,
+      title: title ? title.trim() : undefined,
+      parentId: parentId ? parseInt(parentId) : undefined,
       createdAt: new Date().toISOString()
     };
 

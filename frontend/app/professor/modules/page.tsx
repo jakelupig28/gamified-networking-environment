@@ -1731,6 +1731,8 @@ const getPreviewTopics = (topicsList: Topic[]): Topic[] => {
 export default function ProfessorModules() {
   const [modules, setModules] = useState<Module[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [bestStudentStreak, setBestStudentStreak] = useState<{ name: string; streak: number }>({ name: "", streak: 0 });
+  const [avgStreak, setAvgStreak] = useState(0);
   
   // Drag and Drop state for modules
   const [draggedModuleId, setDraggedModuleId] = useState<number | null>(null);
@@ -1950,6 +1952,58 @@ export default function ProfessorModules() {
     };
 
     fetchModules();
+
+    // Fetch student streak data
+    const fetchStreaks = async () => {
+      try {
+        const res = await fetch("/api/users");
+        const data = await res.json();
+        if (data.success && data.users) {
+          const students = data.users.filter((u: any) => u.role === "Student" && u.status === "admitted");
+          let best = { name: "", streak: 0 };
+          let totalStreak = 0;
+          let studentCount = 0;
+
+          students.forEach((s: any) => {
+            const dates: string[] = s.streakDates || [];
+            const streak = calcStreak(dates);
+            totalStreak += streak;
+            studentCount++;
+            if (streak > best.streak) {
+              best = { name: s.name, streak };
+            }
+          });
+
+          setBestStudentStreak(best);
+          setAvgStreak(studentCount > 0 ? Math.round(totalStreak / studentCount) : 0);
+        }
+      } catch (e) {
+        console.error("Error fetching streaks:", e);
+      }
+    };
+
+    const calcStreak = (dates: string[]): number => {
+      if (dates.length === 0) return 0;
+      const sorted = [...new Set(dates)].sort().reverse();
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      const todayStr = today.toISOString().slice(0, 10);
+      const yesterdayStr = yesterday.toISOString().slice(0, 10);
+      if (sorted[0] !== todayStr && sorted[0] !== yesterdayStr) return 0;
+      let streak = 1;
+      let current = new Date(sorted[0] + "T00:00:00");
+      for (let i = 1; i < sorted.length; i++) {
+        const prev = new Date(sorted[i] + "T00:00:00");
+        const diff = (current.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24);
+        if (diff === 1) { streak++; current = prev; }
+        else if (diff > 1) break;
+      }
+      return streak;
+    };
+
+    fetchStreaks();
   }, []);
 
   // Sync selected topic/subtopic for Student Preview mode when enabled
@@ -3364,7 +3418,7 @@ export default function ProfessorModules() {
         </header>
 
         {/* Statistics Panels */}
-        <section className="grid grid-cols-3 gap-4 mb-8">
+        <section className="grid grid-cols-4 gap-4 mb-8">
           <div className="bg-brand-card border border-brand-border/40 rounded-xl p-4 flex items-center justify-between shadow-sm">
             <div>
               <div className="text-[10px] font-bold uppercase tracking-wider text-brand-muted">Modules</div>
@@ -3390,6 +3444,21 @@ export default function ProfessorModules() {
             </div>
             <div className="p-2.5 bg-brand-cyan/10 rounded-lg text-brand-cyan">
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            </div>
+          </div>
+          <div className={`bg-brand-card border rounded-xl p-4 flex items-center justify-between shadow-sm ${bestStudentStreak.streak > 0 ? 'border-orange-500/30 streak-card-glow' : 'border-brand-border/40'}`}>
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-brand-muted">Best Streak 🔥</div>
+              <div className="flex items-baseline gap-1.5 mt-1">
+                <span className={`text-2xl font-bold ${bestStudentStreak.streak > 0 ? 'text-orange-400' : ''}`}>{bestStudentStreak.streak}</span>
+                <span className="text-[9px] text-brand-muted font-bold">{bestStudentStreak.streak === 1 ? 'day' : 'days'}</span>
+              </div>
+              {bestStudentStreak.name && (
+                <div className="text-[9px] text-brand-muted mt-0.5 truncate max-w-[120px]" title={bestStudentStreak.name}>{bestStudentStreak.name}</div>
+              )}
+            </div>
+            <div className={`p-2.5 bg-orange-500/10 rounded-lg text-2xl ${bestStudentStreak.streak > 0 ? 'streak-fire' : 'opacity-30 grayscale'}`}>
+              🔥
             </div>
           </div>
         </section>

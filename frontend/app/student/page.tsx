@@ -54,6 +54,7 @@ export default function StudentDashboard() {
   const [completedPretests, setCompletedPretests] = useState<Record<number, boolean>>({});
   const [pretestScores, setPretestScores] = useState<Record<number, number>>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [streakDates, setStreakDates] = useState<string[]>([]);
 
   useEffect(() => {
     const savedName = localStorage.getItem("userName");
@@ -108,6 +109,11 @@ export default function StudentDashboard() {
           if (profile) {
             setUserProfile(profile);
             
+            // Load streak dates
+            if (profile.streakDates) {
+              setStreakDates(profile.streakDates);
+            }
+
             // Sync server-side scores/progress back to localStorage
             if (profile.completedTopics) {
               localStorage.setItem(`completed_topics_${savedNameFull}`, JSON.stringify(profile.completedTopics));
@@ -273,6 +279,63 @@ export default function StudentDashboard() {
     });
     return Math.round(sum / totalTopicsCount);
   })();
+
+  // Fire Streak Calculation
+  const calculateStreak = (dates: string[]): number => {
+    if (dates.length === 0) return 0;
+    const sorted = [...new Set(dates)].sort().reverse(); // newest first
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    const todayStr = today.toISOString().slice(0, 10);
+    const yesterdayStr = yesterday.toISOString().slice(0, 10);
+
+    // Streak must include today or yesterday
+    if (sorted[0] !== todayStr && sorted[0] !== yesterdayStr) return 0;
+
+    let streak = 1;
+    let current = new Date(sorted[0] + "T00:00:00");
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = new Date(sorted[i] + "T00:00:00");
+      const diff = (current.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24);
+      if (diff === 1) {
+        streak++;
+        current = prev;
+      } else if (diff > 1) {
+        break;
+      }
+    }
+    return streak;
+  };
+
+  const currentStreak = calculateStreak(streakDates);
+
+  const getStreakMessage = (streak: number): string => {
+    if (streak === 0) return "Start learning today to begin your streak!";
+    if (streak === 1) return "Great start! Come back tomorrow to keep it going.";
+    if (streak <= 3) return "Building momentum — keep it up!";
+    if (streak <= 7) return "You're on fire! Impressive consistency.";
+    if (streak <= 14) return "Incredible dedication! You're unstoppable.";
+    return "Legendary streak! You're a true scholar.";
+  };
+
+  // Get last 7 days for heatmap
+  const getLast7Days = () => {
+    const days = [];
+    const today = new Date();
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().slice(0, 10);
+      const dayLabel = d.toLocaleDateString("en-US", { weekday: "short" }).slice(0, 2);
+      days.push({ date: dateStr, label: dayLabel, active: streakDates.includes(dateStr) });
+    }
+    return days;
+  };
+
+  const last7Days = getLast7Days();
 
   return (
     <div className="min-h-screen bg-brand-bg pl-64 flex flex-col">
@@ -472,6 +535,55 @@ export default function StudentDashboard() {
 
             {/* RIGHT COLUMN: Overall Progress & Actions */}
             <div className="flex flex-col gap-8">
+
+              {/* Fire Streak Card */}
+              <div className={`bg-brand-card border rounded-2xl p-6 shadow-lg ${currentStreak > 0 ? 'border-orange-500/30 streak-card-glow' : 'border-brand-border'}`}>
+                <h2 className="text-xs font-bold uppercase tracking-wider text-brand-cyan mb-4 border-b border-brand-border/40 pb-2">
+                  Learning Streak
+                </h2>
+
+                <div className="flex items-center gap-4 mb-4">
+                  <div className={`text-4xl ${currentStreak > 0 ? 'streak-fire' : 'opacity-30 grayscale'}`}>
+                    🔥
+                  </div>
+                  <div>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className={`text-3xl font-extrabold ${currentStreak > 0 ? 'text-orange-400' : 'text-brand-muted'}`}>
+                        {currentStreak}
+                      </span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-brand-muted">
+                        {currentStreak === 1 ? 'day' : 'days'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-brand-muted mt-0.5 leading-relaxed">
+                      {getStreakMessage(currentStreak)}
+                    </p>
+                  </div>
+                </div>
+
+                {/* 7-Day Activity Heatmap */}
+                <div className="bg-brand-bg/50 border border-brand-border/30 rounded-xl p-3.5 mt-2">
+                  <div className="text-[9px] font-bold uppercase tracking-wider text-brand-muted mb-2.5">Last 7 Days</div>
+                  <div className="flex justify-between gap-1.5">
+                    {last7Days.map((day) => (
+                      <div key={day.date} className="flex flex-col items-center gap-1.5">
+                        <div
+                          className={`w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold transition-all ${
+                            day.active
+                              ? 'bg-gradient-to-br from-orange-500 to-amber-600 text-white shadow-sm shadow-orange-500/20'
+                              : 'bg-brand-border/20 text-brand-muted/50'
+                          }`}
+                        >
+                          {day.active ? '✓' : '·'}
+                        </div>
+                        <span className={`text-[9px] font-bold ${day.active ? 'text-orange-400' : 'text-brand-muted/40'}`}>
+                          {day.label}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
               
               {/* Overall Progress Card */}
               <div className="bg-brand-card border border-brand-border rounded-2xl p-6 shadow-lg flex flex-col items-center justify-center text-center">

@@ -50,6 +50,36 @@ function getAvatarInitials(name: string) {
   return parts[0].substring(0, 2).toUpperCase();
 }
 
+async function recordCheatingLogShared(email: string, moduleId: number, assessmentType: "pretest" | "interactive", reason: string) {
+  if (!email) return;
+  try {
+    const userRes = await fetch("/api/users");
+    const userData = await userRes.json();
+    if (userData.success && userData.users) {
+      const profile = userData.users.find((u: any) => u.email.toLowerCase() === email.toLowerCase());
+      if (profile) {
+        const cheatingLogs = profile.cheatingLogs || [];
+        cheatingLogs.push({
+          assessmentType,
+          moduleId,
+          timestamp: new Date().toISOString(),
+          reason
+        });
+        await fetch("/api/users", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email,
+            cheatingLogs
+          })
+        });
+      }
+    }
+  } catch (e) {
+    console.error("Error saving cheating log:", e);
+  }
+}
+
 interface InteractiveSubnettingActivityProps {
   onComplete: () => void;
   isCompleted: boolean;
@@ -80,6 +110,7 @@ function InteractiveSubnettingActivity({ onComplete, isCompleted, handleSelectNe
 
   const [activeTab, setActiveTab] = useState<number>(1);
   const [activeDeckCard, setActiveDeckCard] = useState<{ val: string; label: string } | null>(null);
+  const [dragOverRowId, setDragOverRowId] = useState<string | null>(null);
 
   // Secure activity & timer states
   const [activityStarted, setActivityStarted] = useState<boolean>(false);
@@ -176,6 +207,8 @@ function InteractiveSubnettingActivity({ onComplete, isCompleted, handleSelectNe
   // Cheat Prevention Callback
   const handleCheatSubmit = (reason: string) => {
     setIsLocked(true);
+    const email = localStorage.getItem("userEmail") || "";
+    recordCheatingLogShared(email, moduleId, "interactive", reason);
     if (task1Score === null) {
       setTask1Score(0);
       saveScore("task1", 0);
@@ -462,13 +495,87 @@ function InteractiveSubnettingActivity({ onComplete, isCompleted, handleSelectNe
     current[taskKey] = score;
     localStorage.setItem(key, JSON.stringify(current));
 
+    // Record streak activity on interactive activity submission
+    const streakEmail = localStorage.getItem("userEmail") || "";
+    if (streakEmail) {
+      const today = new Date().toISOString().slice(0, 10);
+      try {
+        const streakRes = await fetch("/api/users");
+        const streakData = await streakRes.json();
+        if (streakData.success) {
+          const streakProfile = streakData.users.find((u: any) => u.email.toLowerCase() === streakEmail.toLowerCase());
+          if (streakProfile) {
+            const dates: string[] = streakProfile.streakDates || [];
+            if (!dates.includes(today)) {
+              dates.push(today);
+              await fetch("/api/users", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email: streakEmail, streakDates: dates })
+              });
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Error recording streak activity:", e);
+      }
+    }
+
+    // Compile task mistakes
+    const taskNum = taskKey === "task1" ? 1 : taskKey === "task2" ? 2 : 3;
+    const tasksList = INTERACTIVE_ACTIVITIES_CONFIG[moduleIdx] || [];
+    const taskConfig = tasksList[taskNum - 1];
+
+    let taskMistakesList: any[] = [];
+    if (taskConfig) {
+      const answers = taskNum === 1 ? task1Answers : taskNum === 2 ? task2Answers : task3Answers;
+      if (taskConfig.type === "anding") {
+        const correctBits = [0, 1, 0, 0, 0, 0, 0, 0];
+        andingBits.forEach((b, i) => {
+          if (b !== correctBits[i]) {
+            taskMistakesList.push({
+              item: `Bit ${8 - i}`,
+              correct: String(correctBits[i]),
+              user: String(b)
+            });
+          }
+        });
+        if (andingDecimal.trim() !== "64") {
+          taskMistakesList.push({
+            item: "Decimal Result",
+            correct: "64",
+            user: andingDecimal || "No answer"
+          });
+        }
+      } else {
+        Object.keys(taskConfig.correctAnswers).forEach(itemKey => {
+          const userAnswer = answers[itemKey] || "";
+          const correctAnswer = taskConfig.correctAnswers[itemKey];
+          if (userAnswer !== correctAnswer) {
+            const row = taskConfig.rows?.find(r => r.id === itemKey);
+            const rowLabel = row ? row.label : itemKey;
+            const correctOpt = taskConfig.options?.find(o => o.val === correctAnswer);
+            const correctLabel = correctOpt ? correctOpt.label : correctAnswer;
+            const userOpt = taskConfig.options?.find(o => o.val === userAnswer);
+            const userLabel = userOpt ? userOpt.label : (userAnswer || "No answer");
+
+            taskMistakesList.push({
+              item: rowLabel,
+              correct: correctLabel,
+              user: userLabel
+            });
+          }
+        });
+      }
+    }
+
     // Save to database
     const email = localStorage.getItem("userEmail") || "";
     if (email) {
       try {
         const userRes = await fetch("/api/users");
         const userData = await userRes.json();
-        if (userData.success) {
+        if (userData.success && userData.users) {
           const profile = userData.users.find((u: any) => u.email.toLowerCase() === email.toLowerCase());
           if (profile) {
             const updatedInteractiveScores = {
@@ -478,12 +585,20 @@ function InteractiveSubnettingActivity({ onComplete, isCompleted, handleSelectNe
                 [taskKey]: score
               }
             };
+            const updatedInteractiveMistakes = {
+              ...(profile.interactiveMistakes || {}),
+              [moduleId]: {
+                ...(profile.interactiveMistakes?.[moduleId] || {}),
+                [taskKey]: taskMistakesList
+              }
+            };
             await fetch("/api/users", {
               method: "PUT",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 email,
-                interactiveScores: updatedInteractiveScores
+                interactiveScores: updatedInteractiveScores,
+                interactiveMistakes: updatedInteractiveMistakes
               })
             });
           }
@@ -1120,7 +1235,7 @@ function InteractiveSubnettingActivity({ onComplete, isCompleted, handleSelectNe
     return (
       <div className="flex flex-col gap-5 select-none">
         <div className="bg-brand-bg/15 border border-brand-border/20 rounded-xl p-4">
-          <span className="text-[10px] text-brand-cyan font-bold uppercase tracking-wider block mb-3">Available Match Cards</span>
+          <span className="text-[10px] text-brand-cyan font-bold uppercase tracking-wider block mb-3">Available Match Cards (Drag or Click)</span>
           {unassignedOptions.length === 0 ? (
             <div className="text-center text-xs text-brand-muted italic py-1">All cards matched! Submit your answer.</div>
           ) : (
@@ -1132,6 +1247,11 @@ function InteractiveSubnettingActivity({ onComplete, isCompleted, handleSelectNe
                     key={opt.val}
                     type="button"
                     disabled={isLocked}
+                    draggable={!isLocked}
+                    onDragStart={(e) => {
+                      if (isLocked) return;
+                      e.dataTransfer.setData("text/plain", opt.val);
+                    }}
                     onClick={() => handleSelectCard(opt)}
                     className={`px-3 py-2 text-xs font-semibold rounded-xl border transition-all cursor-pointer ${
                       isSelected
@@ -1151,6 +1271,7 @@ function InteractiveSubnettingActivity({ onComplete, isCompleted, handleSelectNe
           {rows.map(row => {
             const assignedVal = answers[row.id];
             const assignedOpt = options.find(o => o.val === assignedVal);
+            const isDragOver = dragOverRowId === row.id;
 
             return (
               <div key={row.id} className="bg-brand-bg/25 border border-brand-border/30 rounded-xl p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -1159,15 +1280,36 @@ function InteractiveSubnettingActivity({ onComplete, isCompleted, handleSelectNe
                   type="button"
                   disabled={isLocked}
                   onClick={() => handleAssignSlot(row.id)}
+                  onDragOver={(e) => {
+                    if (!isLocked) e.preventDefault();
+                  }}
+                  onDragEnter={() => {
+                    if (!isLocked) setDragOverRowId(row.id);
+                  }}
+                  onDragLeave={() => {
+                    setDragOverRowId(null);
+                  }}
+                  onDrop={(e) => {
+                    if (isLocked) return;
+                    e.preventDefault();
+                    setDragOverRowId(null);
+                    const droppedVal = e.dataTransfer.getData("text/plain");
+                    if (droppedVal) {
+                      setAnswers(prev => ({ ...prev, [row.id]: droppedVal }));
+                      setActiveDeckCard(null);
+                    }
+                  }}
                   className={`w-full md:w-56 h-10 px-3 flex items-center justify-between border-2 rounded-xl text-xs transition-all cursor-pointer ${
-                    assignedOpt
+                    isDragOver
+                      ? "bg-brand-cyan/20 border-brand-cyan text-brand-cyan font-bold scale-105"
+                      : assignedOpt
                       ? "bg-brand-cyan/10 border-brand-cyan text-brand-cyan font-bold"
                       : activeDeckCard
                       ? "bg-brand-card/30 border-dashed border-brand-cyan/40 text-brand-muted hover:border-brand-cyan/60"
                       : "bg-brand-card/20 border-dashed border-brand-border/50 text-brand-muted hover:border-brand-border"
                   }`}
                 >
-                  <span className="truncate">{assignedOpt ? assignedOpt.label : "Click to place active card..."}</span>
+                  <span className="truncate">{assignedOpt ? assignedOpt.label : "Click or drag card here..."}</span>
                   {assignedOpt && (
                     <span className="text-brand-muted text-[10px] hover:text-brand-text ml-2 shrink-0">✕</span>
                   )}
@@ -2267,6 +2409,10 @@ export default function StudentCurriculum() {
   const [takingPretest, setTakingPretest] = useState(false);
   const [pretestAnswers, setPretestAnswers] = useState<Record<number, number>>({});
   const [pretestScore, setPretestScore] = useState<number | null>(null);
+  const [pretestStarted, setPretestStarted] = useState(false);
+  const [pretestFullscreenActive, setPretestFullscreenActive] = useState(false);
+  const [pretestWarningsLeft, setPretestWarningsLeft] = useState(3);
+  const [pretestLocked, setPretestLocked] = useState(false);
 
   const saveProgressToServer = async (updates: any) => {
     const email = localStorage.getItem("userEmail") || "";
@@ -2282,6 +2428,33 @@ export default function StudentCurriculum() {
       });
     } catch (e) {
       console.error("Error saving progress to server:", e);
+    }
+  };
+
+  // Record today's date for fire streak tracking
+  const recordStreakActivity = async () => {
+    const email = localStorage.getItem("userEmail") || "";
+    if (!email) return;
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    try {
+      const res = await fetch("/api/users");
+      const data = await res.json();
+      if (data.success) {
+        const profile = data.users.find((u: any) => u.email.toLowerCase() === email.toLowerCase());
+        if (profile) {
+          const dates: string[] = profile.streakDates || [];
+          if (!dates.includes(today)) {
+            dates.push(today);
+            await fetch("/api/users", {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ email, streakDates: dates })
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Error recording streak activity:", e);
     }
   };
 
@@ -3163,7 +3336,58 @@ export default function StudentCurriculum() {
     setTakingPretest(false);
     setPretestAnswers({});
     setPretestScore(null);
+    setPretestStarted(false);
+    setPretestFullscreenActive(false);
+    setPretestWarningsLeft(3);
+    setPretestLocked(false);
   }, [selectedTopic, selectedSubtopic, selectedModuleId]);
+
+  // Pre-test Fullscreen & Visibility Event Listeners
+  useEffect(() => {
+    if (!takingPretest || !pretestStarted || pretestLocked || (selectedModule && completedPretests[selectedModule.id])) return;
+
+    const handlePretestFullscreenChange = () => {
+      const isFs = !!(
+        document.fullscreenElement ||
+        (document as any).webkitFullscreenElement ||
+        (document as any).mozFullScreenElement ||
+        (document as any).msFullscreenElement
+      );
+      setPretestFullscreenActive(isFs);
+
+      if (!isFs) {
+        setPretestWarningsLeft(prev => {
+          const next = prev - 1;
+          if (next <= 0) {
+            handlePretestCheatSubmit("Fullscreen exit limit reached");
+          }
+          return next;
+        });
+      }
+    };
+
+    const handlePretestVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        setPretestWarningsLeft(prev => {
+          const next = prev - 1;
+          if (next <= 0) {
+            handlePretestCheatSubmit("Tab switch limit reached");
+          }
+          return next;
+        });
+      }
+    };
+
+    document.addEventListener("fullscreenchange", handlePretestFullscreenChange);
+    document.addEventListener("webkitfullscreenchange", handlePretestFullscreenChange);
+    document.addEventListener("visibilitychange", handlePretestVisibilityChange);
+
+    return () => {
+      document.removeEventListener("fullscreenchange", handlePretestFullscreenChange);
+      document.removeEventListener("webkitfullscreenchange", handlePretestFullscreenChange);
+      document.removeEventListener("visibilitychange", handlePretestVisibilityChange);
+    };
+  }, [takingPretest, pretestStarted, pretestLocked, pretestAnswers, selectedModule, completedPretests]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -3215,6 +3439,11 @@ export default function StudentCurriculum() {
     saveProgressToServer({
       completedTopics: updated
     });
+
+    // Record streak activity when marking a topic complete
+    if (updated[topicId]) {
+      recordStreakActivity();
+    }
   };
 
   const markVideoAsWatched = (materialId: number) => {
@@ -3273,13 +3502,30 @@ export default function StudentCurriculum() {
     return Math.round(totalProgress / previewTopics.length);
   };
 
-  const submitPretest = (moduleId: number, pretest: PretestQuestion[]) => {
+  const submitPretest = (moduleId: number, pretest: PretestQuestion[], isCheated: boolean = false) => {
     let score = 0;
-    pretest.forEach((q, idx) => {
-      if (pretestAnswers[idx] === q.correctAnswer) {
-        score += 1;
-      }
-    });
+    const pretestMistakesList: any[] = [];
+    if (!isCheated) {
+      pretest.forEach((q, idx) => {
+        if (pretestAnswers[idx] === q.correctAnswer) {
+          score += 1;
+        } else {
+          pretestMistakesList.push({
+            question: q.question,
+            correctAnswer: q.options[q.correctAnswer] || String(q.correctAnswer),
+            userAnswer: pretestAnswers[idx] !== undefined ? (q.options[pretestAnswers[idx]] || String(pretestAnswers[idx])) : "No answer"
+          });
+        }
+      });
+    } else {
+      pretest.forEach((q, idx) => {
+        pretestMistakesList.push({
+          question: q.question,
+          correctAnswer: q.options[q.correctAnswer] || String(q.correctAnswer),
+          userAnswer: "Flagged for violation"
+        });
+      });
+    }
     setPretestScore(score);
     const savedName = localStorage.getItem("userName") || "Student";
     const updated = { ...completedPretests, [moduleId]: true };
@@ -3290,10 +3536,76 @@ export default function StudentCurriculum() {
     setPretestScores(updatedScores);
     localStorage.setItem(`pretest_scores_${savedName}`, JSON.stringify(updatedScores));
 
-    saveProgressToServer({
-      completedPretests: updated,
-      pretestScores: updatedScores
-    });
+    // Save to server with pretestMistakes
+    const email = localStorage.getItem("userEmail") || "";
+    if (email) {
+      fetch("/api/users")
+        .then(res => res.json())
+        .then(async (userData) => {
+          if (userData.success && userData.users) {
+            const profile = userData.users.find((u: any) => u.email.toLowerCase() === email.toLowerCase());
+            if (profile) {
+              const updatedPretestMistakes = {
+                ...(profile.pretestMistakes || {}),
+                [moduleId]: pretestMistakesList
+              };
+              saveProgressToServer({
+                completedPretests: updated,
+                pretestScores: updatedScores,
+                pretestMistakes: updatedPretestMistakes
+              });
+            }
+          }
+        })
+        .catch(err => {
+          console.error("Error updating pretest mistakes:", err);
+          saveProgressToServer({
+            completedPretests: updated,
+            pretestScores: updatedScores
+          });
+        });
+    } else {
+      saveProgressToServer({
+        completedPretests: updated,
+        pretestScores: updatedScores
+      });
+    }
+
+    // Record streak activity on pretest completion
+    recordStreakActivity();
+  };
+
+  const handleStartPretestSecure = async () => {
+    try {
+      const elem = document.documentElement;
+      if (elem.requestFullscreen) {
+        await elem.requestFullscreen();
+      } else if ((elem as any).webkitRequestFullscreen) {
+        await (elem as any).webkitRequestFullscreen();
+      } else if ((elem as any).msRequestFullscreen) {
+        await (elem as any).msRequestFullscreen();
+      }
+      setPretestFullscreenActive(true);
+      setPretestStarted(true);
+    } catch (e) {
+      console.error("Fullscreen request blocked", e);
+      setPretestFullscreenActive(true);
+      setPretestStarted(true);
+    }
+  };
+
+  const handlePretestCheatSubmit = (reason: string) => {
+    setPretestLocked(true);
+    if (selectedModule && selectedModule.pretest) {
+      submitPretest(selectedModule.id, selectedModule.pretest, true);
+    }
+    const email = localStorage.getItem("userEmail") || "";
+    recordCheatingLogShared(email, selectedModule?.id || 0, "pretest", reason);
+    if (document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {});
+    } else if ((document as any).webkitExitFullscreen) {
+      (document as any).webkitExitFullscreen();
+    }
   };
 
   const isTopicUnlocked = (mod: Module, topicIdx: number): boolean => {
@@ -4416,13 +4728,100 @@ export default function StudentCurriculum() {
                         Start Learning →
                       </button>
                     </div>
+                  ) : !pretestStarted ? (
+                    // Pre-test security screen
+                    <div className="bg-brand-card/40 border border-brand-border/30 rounded-2xl p-8 text-center flex flex-col items-center justify-center min-h-[400px] select-none gap-6 max-w-xl mx-auto shadow-xl">
+                      <div className="w-16 h-16 rounded-full bg-brand-cyan/10 border border-brand-cyan flex items-center justify-center text-brand-cyan animate-pulse">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-extrabold text-brand-text mb-2">Secure Assessment Mode Required</h3>
+                        <p className="text-xs text-brand-muted leading-relaxed">
+                          To ensure academic integrity, this pre-test runs in **Secure Fullscreen Mode**.
+                        </p>
+                      </div>
+                      <ul className="text-left text-xs text-brand-muted space-y-2 border-y border-brand-border/30 py-4 w-full">
+                        <li className="flex items-start gap-2">
+                          <span className="text-brand-cyan font-bold">•</span>
+                          <span><strong>Fullscreen Enforced:</strong> Do not exit fullscreen. Exiting counts as a warning.</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="text-brand-cyan font-bold">•</span>
+                          <span><strong>Cheat Prevention:</strong> Max 3 warnings (exiting fullscreen or shifting tabs) before the session auto-locks.</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="text-brand-cyan font-bold">•</span>
+                          <span><strong>Copy Protected:</strong> Copying, cutting, pasting, and right-clicks are disabled.</span>
+                        </li>
+                      </ul>
+                      <button
+                        onClick={handleStartPretestSecure}
+                        className="w-full py-3 bg-brand-cyan hover:bg-brand-cyan-hover text-brand-bg text-xs font-mono font-extrabold uppercase tracking-wider rounded-xl transition-all shadow-lg hover:shadow-brand-cyan/20 cursor-pointer"
+                      >
+                        Begin Secure Pre-test
+                      </button>
+                    </div>
+                  ) : pretestStarted && !pretestFullscreenActive && !pretestLocked ? (
+                    // Warnings left page
+                    <div className="bg-red-500/5 border border-red-500/20 rounded-2xl p-8 text-center flex flex-col items-center justify-center min-h-[400px] select-none gap-6 max-w-xl mx-auto shadow-xl">
+                      <div className="w-16 h-16 rounded-full bg-red-500/10 border border-red-500 flex items-center justify-center text-red-400 animate-bounce">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-extrabold text-red-400 mb-2">Security Warning: Fullscreen Exited</h3>
+                        <p className="text-xs text-brand-muted leading-relaxed">
+                          You have exited fullscreen mode. Please re-enter immediately to continue the pre-test.
+                        </p>
+                      </div>
+                      <div className="bg-red-500/10 border border-red-500/20 px-4 py-2.5 rounded-xl text-xs font-bold text-red-400">
+                        ⚠️ Warnings Left: {pretestWarningsLeft} / 3. Shifting focus or exiting again will LOCK your pre-test.
+                      </div>
+                      <button
+                        onClick={handleStartPretestSecure}
+                        className="w-full py-3 bg-red-500 hover:bg-red-600 text-white text-xs font-mono font-extrabold uppercase tracking-wider rounded-xl transition-all shadow-lg cursor-pointer"
+                      >
+                        Re-enter Fullscreen & Resume
+                      </button>
+                    </div>
+                  ) : pretestLocked ? (
+                    // Pretest locked screen
+                    <div className="bg-brand-card/40 border border-brand-border/30 rounded-2xl p-8 text-center flex flex-col items-center justify-center min-h-[400px] select-none gap-6 max-w-xl mx-auto shadow-xl">
+                      <div className="w-16 h-16 rounded-full bg-red-500/10 border border-red-500 flex items-center justify-center text-red-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-extrabold text-brand-text mb-2">Pre-test Session Locked</h3>
+                        <p className="text-xs text-brand-muted leading-relaxed">
+                          This pre-test has been auto-submitted and locked due to repeatedly exiting fullscreen or changing tabs.
+                        </p>
+                      </div>
+                      <div className="bg-brand-cyan/15 border border-brand-cyan/20 px-6 py-3.5 rounded-xl w-full flex items-center justify-between">
+                        <span className="text-xs font-bold text-brand-text uppercase tracking-wider">Final Pre-test Score</span>
+                        <span className="text-base font-mono font-black text-brand-cyan">0 / {selectedModule.pretest.length}</span>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setTakingPretest(false);
+                          setPretestScore(null);
+                          if (selectedModule.topics.length > 0) {
+                            setSelectedTopic(getPreviewTopics(selectedModule.topics)[0]);
+                          }
+                        }}
+                        className="w-full py-3 bg-brand-cyan hover:bg-brand-cyan-hover text-brand-bg text-xs font-mono font-extrabold uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                      >
+                        Continue to Topics
+                      </button>
+                    </div>
                   ) : (
                     // Quiz questions form
-                    <div className="flex-grow flex flex-col gap-6">
-                      <div className="bg-brand-bg/40 border border-brand-border/30 rounded-xl p-4">
+                    <div className="flex-grow flex flex-col gap-6" onContextMenu={(e) => e.preventDefault()} onCopy={(e) => e.preventDefault()} onCut={(e) => e.preventDefault()}>
+                      <div className="bg-brand-bg/40 border border-brand-border/30 rounded-xl p-4 flex justify-between items-center">
                         <p className="text-xs text-brand-muted leading-relaxed">
-                          This pre-test contains <strong>{selectedModule.pretest.length} multiple-choice questions</strong> designed to evaluate your current knowledge level on this topic. Please answer all questions and submit. Your score will be saved, and the first topic will unlock immediately.
+                          This pre-test contains <strong>{selectedModule.pretest.length} multiple-choice questions</strong> designed to evaluate your current knowledge level.
                         </p>
+                        <span className="text-xs font-bold text-red-400 bg-red-400/10 px-2.5 py-1 rounded-md shrink-0 select-none">
+                          ⚠️ Warnings: {pretestWarningsLeft} / 3
+                        </span>
                       </div>
 
                       <div className="flex flex-col gap-6 overflow-y-auto max-h-[500px] pr-2">

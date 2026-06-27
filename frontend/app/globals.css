@@ -138,4 +138,45 @@ body {
   opacity: 0.5;
   pointer-events: none;
   display: block;
+}
+
+/* Fire Streak Animation */
+@keyframes flame-pulse {
+  0%, 100% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 4px rgba(251, 146, 60, 0.4));
+  }
+  50% {
+    transform: scale(1.15);
+    filter: drop-shadow(0 0 12px rgba(251, 146, 60, 0.7)) drop-shadow(0 0 20px rgba(239, 68, 68, 0.3));
+  }
+}
+
+@keyframes flame-flicker {
+  0%, 100% { transform: scaleY(1) scaleX(1); }
+  25% { transform: scaleY(1.04) scaleX(0.96); }
+  50% { transform: scaleY(0.96) scaleX(1.04); }
+  75% { transform: scaleY(1.02) scaleX(0.98); }
+}
+
+.streak-fire {
+  animation: flame-pulse 2s ease-in-out infinite;
+  display: inline-flex;
+}
+
+.streak-fire-flicker {
+  animation: flame-flicker 0.6s ease-in-out infinite;
+}
+
+@keyframes streak-glow {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(251, 146, 60, 0.15), inset 0 0 8px rgba(251, 146, 60, 0.05);
+  }
+  50% {
+    box-shadow: 0 0 16px rgba(251, 146, 60, 0.25), inset 0 0 12px rgba(251, 146, 60, 0.08);
+  }
+}
+
+.streak-card-glow {
+  animation: streak-glow 3s ease-in-out infinite;
 }

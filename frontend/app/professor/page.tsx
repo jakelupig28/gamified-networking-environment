@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
+import { INTERACTIVE_ACTIVITIES_CONFIG } from "@/data/interactiveActivities";
 
 const getInteractiveModuleDetails = (mId: string | number, scores: any) => {
   const ids = [
@@ -120,6 +121,10 @@ export default function ProfessorDashboard() {
   const router = useRouter();
   const [isFirstLogin, setIsFirstLogin] = useState(false);
   const [userName, setUserName] = useState("Dr. A. Chen");
+  const [activeTab, setActiveTab] = useState<"roster" | "heatmaps" | "security">("roster");
+  const [selectedModuleId, setSelectedModuleId] = useState<string>("");
+  const [assessmentType, setAssessmentType] = useState<"pretest" | "interactive">("pretest");
+  const [selectedGridCell, setSelectedGridCell] = useState<any | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -191,6 +196,12 @@ export default function ProfessorDashboard() {
     window.addEventListener("profilePicUpdated", handlePicUpdate);
     return () => window.removeEventListener("profilePicUpdated", handlePicUpdate);
   }, []);
+
+  useEffect(() => {
+    if (modules.length > 0 && !selectedModuleId) {
+      setSelectedModuleId(String(modules[0].id));
+    }
+  }, [modules, selectedModuleId]);
 
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -501,83 +512,79 @@ export default function ProfessorDashboard() {
             </div>
          </div>
 
-         {/* Student Performance & Scores Panel */}
-         <div className="mt-8 bg-brand-card border border-brand-border rounded-xl p-6 shadow-md">
-           <div className="flex justify-between items-center mb-6">
-             <h2 className="text-lg font-bold">Student Performance & Roster</h2>
-             <span className="text-xs text-brand-muted font-mono">{students.length} Student(s) registered</span>
-           </div>
+          {/* Student Performance & Scores Panel */}
+          <div className="mt-8 bg-brand-card border border-brand-border rounded-xl p-6 shadow-md">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-lg font-bold">Student Performance & Roster</h2>
+              <span className="text-xs text-brand-muted font-mono">{students.length} Student(s) registered</span>
+            </div>
 
-           {students.length === 0 ? (
-             <div className="text-center py-10 text-brand-muted text-sm border border-dashed border-brand-border/40 rounded-xl bg-brand-bg/25">
-               No students are currently registered in the course.
-             </div>
-           ) : (
-             <div className="overflow-x-auto">
-               <table className="w-full text-left text-xs border-collapse">
-                 <thead>
-                   <tr className="border-b border-brand-border/40 text-brand-muted uppercase tracking-wider text-[10px] font-bold">
-                     <th className="py-3.5 px-4">Student Details</th>
-                     <th className="py-3.5 px-4">Status</th>
-                     <th className="py-3.5 px-4 text-center">Overall Progress</th>
-                     <th className="py-3.5 px-4 text-center">Pre-test Scores</th>
-                     <th className="py-3.5 px-4 text-center">Interactive Activities</th>
-                   </tr>
-                 </thead>
-                 <tbody className="divide-y divide-brand-border/20">
-                   {students.map((student) => {
-                     const progress = calculateStudentProgress(student);
-                     
-                     // Format Pre-tests
-                     const pScores = student.pretestScores || {};
-                     const pretestDisplay = Object.keys(pScores).length > 0 
-                       ? Object.entries(pScores).map(([mId, score]) => {
-                           const mTitle = modules.find(m => String(m.id) === String(mId))?.title || `Mod ${mId}`;
-                           const maxQuestions = modules.find(m => String(m.id) === String(mId))?.pretest?.length || 5;
-                           return `${mTitle}: ${score}/${maxQuestions}`;
-                         }).join(", ")
-                       : "No pre-tests taken";
+            {students.length === 0 ? (
+              <div className="text-center py-10 text-brand-muted text-sm border border-dashed border-brand-border/40 rounded-xl bg-brand-bg/25">
+                No students are currently registered in the course.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-brand-border/40 text-brand-muted uppercase tracking-wider text-[10px] font-bold">
+                      <th className="py-3.5 px-4">Student Details</th>
+                      <th className="py-3.5 px-4">Status</th>
+                      <th className="py-3.5 px-4 text-center">Overall Progress</th>
+                      <th className="py-3.5 px-4 text-center">Pre-test Scores</th>
+                      <th className="py-3.5 px-4 text-center">Interactive Activities</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-brand-border/20">
+                    {students.map((student) => {
+                      const progress = calculateStudentProgress(student);
+                      const pScores = student.pretestScores || {};
+                      const pretestDisplay = Object.keys(pScores).length > 0 
+                        ? Object.entries(pScores).map(([mId, score]) => {
+                            const mTitle = modules.find(m => String(m.id) === String(mId))?.title || `Mod ${mId}`;
+                            const maxQuestions = modules.find(m => String(m.id) === String(mId))?.pretest?.length || 5;
+                            return `${mTitle}: ${score}/${maxQuestions}`;
+                          }).join(", ")
+                        : "No pre-tests taken";
+                      const iScores = student.interactiveScores || {};
 
-                     // Format Interactive subnetting
-                     const iScores = student.interactiveScores || {};
-
-                     return (
-                       <tr key={student.id} className="hover:bg-brand-bg/25 transition-colors">
-                         <td className="py-4 px-4">
-                           <div className="font-bold text-brand-text text-sm">{student.name}</div>
-                           <div className="text-[10px] text-brand-muted font-mono mt-0.5">
-                             ID: {student.studentId || "N/A"} • {student.email}
-                           </div>
-                           {student.course && (
-                             <div className="text-[9px] text-brand-cyan/85 mt-0.5">
-                               {student.course} - Year {student.yearLevel || "N/A"} (Sec {student.section || "N/A"})
-                             </div>
-                           )}
-                         </td>
-                         <td className="py-4 px-4">
-                           <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${
-                             student.status === "admitted"
-                               ? "bg-green-500/10 border-green-500/20 text-green-400"
-                               : student.status === "rejected"
-                                 ? "bg-red-500/10 border-red-500/20 text-red-400"
-                                 : "bg-yellow-500/10 border-yellow-500/20 text-yellow-500"
-                           }`}>
-                             {student.status === "admitted" ? "Admitted" : student.status === "rejected" ? "Rejected" : "Pending"}
-                           </span>
-                         </td>
-                         <td className="py-4 px-4 text-center">
-                           <div className="flex flex-col items-center gap-1.5">
-                             <span className="font-bold text-brand-text text-sm font-mono">{progress}%</span>
-                             <div className="w-24 h-2 bg-brand-bg rounded-full overflow-hidden border border-brand-border/20">
-                               <div className="h-full bg-brand-cyan" style={{ width: `${progress}%` }} />
-                             </div>
-                           </div>
-                         </td>
-                         <td className="py-4 px-4 text-center font-semibold text-brand-text">
-                           <div className="max-w-[200px] mx-auto text-xs truncate" title={pretestDisplay}>
-                             {pretestDisplay}
-                           </div>
-                         </td>
+                      return (
+                        <tr key={student.id} className="hover:bg-brand-bg/25 transition-colors">
+                          <td className="py-4 px-4">
+                            <div className="font-bold text-brand-text text-sm">{student.name}</div>
+                            <div className="text-[10px] text-brand-muted font-mono mt-0.5">
+                              ID: {student.studentId || "N/A"} • {student.email}
+                            </div>
+                            {student.course && (
+                              <div className="text-[9px] text-brand-cyan/85 mt-0.5">
+                                {student.course} - Year {student.yearLevel || "N/A"} (Sec {student.section || "N/A"})
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-4 px-4">
+                            <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${
+                              student.status === "admitted"
+                                ? "bg-green-500/10 border-green-500/20 text-green-400"
+                                : student.status === "rejected"
+                                  ? "bg-red-500/10 border-red-500/20 text-red-400"
+                                  : "bg-yellow-500/10 border-yellow-500/20 text-yellow-500"
+                            }`}>
+                              {student.status === "admitted" ? "Admitted" : student.status === "rejected" ? "Rejected" : "Pending"}
+                            </span>
+                          </td>
+                          <td className="py-4 px-4 text-center">
+                            <div className="flex flex-col items-center gap-1.5">
+                              <span className="font-bold text-brand-text text-sm font-mono">{progress}%</span>
+                              <div className="w-24 h-2 bg-brand-bg rounded-full overflow-hidden border border-brand-border/20">
+                                <div className="h-full bg-brand-cyan" style={{ width: `${progress}%` }} />
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-4 px-4 text-center font-semibold text-brand-text">
+                            <div className="max-w-[200px] mx-auto text-xs truncate" title={pretestDisplay}>
+                              {pretestDisplay}
+                            </div>
+                          </td>
                           <td className="py-4 px-4 text-center text-brand-text">
                             <div className="max-w-[250px] mx-auto text-[11px] font-mono leading-relaxed flex flex-col gap-2">
                               {Object.keys(iScores).length > 0 ? (
@@ -596,14 +603,14 @@ export default function ProfessorDashboard() {
                               )}
                             </div>
                           </td>
-                       </tr>
-                     );
-                   })}
-                 </tbody>
-               </table>
-             </div>
-           )}
-         </div>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
  
        </main>
     </div>

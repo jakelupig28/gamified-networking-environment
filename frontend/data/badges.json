@@ -1,0 +1,56 @@
+[
+  {
+    "id": "badge-default-simulation-master",
+    "name": "Simulation Master",
+    "description": "Awarded for exceptional performance in network simulation exercises and hands-on lab activities.",
+    "criteria": "Complete all interactive simulation activities with a score of 80% or higher.",
+    "imagePath": "/badges/simulation-master.png",
+    "isDefault": true,
+    "createdAt": "2026-01-01T00:00:00.000Z"
+  },
+  {
+    "id": "badge-default-competency",
+    "name": "Competency Badge",
+    "description": "Demonstrates strong competency and understanding of core networking concepts.",
+    "criteria": "Pass all module pre-tests and complete all course topics successfully.",
+    "imagePath": "/badges/competency-badge.png",
+    "isDefault": true,
+    "createdAt": "2026-01-01T00:00:00.000Z"
+  },
+  {
+    "id": "badge-default-consistent-learner",
+    "name": "Consistent Learner",
+    "description": "Recognizes dedication and consistent engagement throughout the entire course.",
+    "criteria": "Maintain regular progress and complete learning materials consistently across all modules.",
+    "imagePath": "/badges/consistent-learner.png",
+    "isDefault": true,
+    "createdAt": "2026-01-01T00:00:00.000Z"
+  },
+  {
+    "id": "badge-default-top-1",
+    "name": "Top 1 Overall",
+    "description": "Awarded to the student who achieves the highest overall score in the entire course.",
+    "criteria": "Achieve the #1 rank in combined pre-test and interactive activity scores.",
+    "imagePath": "/badges/top-1-overall.png",
+    "isDefault": true,
+    "createdAt": "2026-01-01T00:00:00.000Z"
+  },
+  {
+    "id": "badge-default-top-2",
+    "name": "Top 2 Overall",
+    "description": "Awarded to the student who achieves the second highest overall score in the course.",
+    "criteria": "Achieve the #2 rank in combined pre-test and interactive activity scores.",
+    "imagePath": "/badges/top-2-overall.png",
+    "isDefault": true,
+    "createdAt": "2026-01-01T00:00:00.000Z"
+  },
+  {
+    "id": "badge-default-top-3",
+    "name": "Top 3 Overall",
+    "description": "Awarded to the student who achieves the third highest overall score in the course.",
+    "criteria": "Achieve the #3 rank in combined pre-test and interactive activity scores.",
+    "imagePath": "/badges/top-3-overall.png",
+    "isDefault": true,
+    "createdAt": "2026-01-01T00:00:00.000Z"
+  }
+]

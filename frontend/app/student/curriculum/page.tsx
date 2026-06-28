@@ -80,6 +80,141 @@ async function recordCheatingLogShared(email: string, moduleId: number, assessme
   }
 }
 
+interface SimulationLabActivityCardProps {
+  moduleId: number;
+  isCompleted: boolean;
+  onComplete: () => void;
+  handleSelectNextTopic: () => void;
+}
+
+const SIMULATION_LAB_DATA: Record<number, {
+  title: string;
+  labId: string;
+  description: string;
+  requirements: string[];
+}> = {
+  3: {
+    title: "IPv4 Static Addressing Challenge",
+    labId: "ipv4-addressing",
+    description: "Configure static IP addresses for two PCs on the same subnet and verify connectivity using the ping utility.",
+    requirements: [
+      "Add two PCs (pc1 and pc2) to the canvas.",
+      "Connect them using a crossover cable (or straight cables through a switch).",
+      "Configure pc1 with IP address 192.168.1.10, subnet mask 255.255.255.0.",
+      "Configure pc2 with IP address 192.168.1.20, subnet mask 255.255.255.0.",
+      "Start the Kathará Lab simulation.",
+      "Open pc1's console terminal and successfully ping pc2 (192.168.1.20)."
+    ]
+  },
+  6: {
+    title: "Local Host Cabling Challenge",
+    labId: "host-cabling",
+    description: "Cabling is the backbone of local networks. Practice physical media selection and local configuration.",
+    requirements: [
+      "Add a PC (pc1) and a Switch (sw1) to the canvas.",
+      "Connect pc1 and sw1 using a straight-through cable link.",
+      "Configure pc1's eth0 interface with IP address 10.0.0.10, subnet mask 255.255.255.0.",
+      "Start the Kathará Lab simulation to boot the interfaces."
+    ]
+  },
+  7: {
+    title: "Gateway Router Configuration Challenge",
+    labId: "router-config",
+    description: "Routers act as gateways to outer networks. Assign interface IPs and check client-router pings.",
+    requirements: [
+      "Add a PC (pc1) and a Router (r1) to the canvas.",
+      "Connect pc1 and r1 directly (or through a switch).",
+      "Configure Router r1's eth0 interface with IP address 192.168.1.1, subnet mask 255.255.255.0.",
+      "Configure PC pc1 with IP address 192.168.1.10 and gateway IP 192.168.1.1.",
+      "Start the Kathará Lab, open pc1's console, and ping the gateway (192.168.1.1) successfully."
+    ]
+  },
+  9: {
+    title: "Inter-network Static Routing Challenge",
+    labId: "static-routing",
+    description: "Routers need static route definitions to forward packets to remote subnets. Link two local networks and check pings.",
+    requirements: [
+      "Connect Router r1 to Router r2 via crossover cable.",
+      "Add pc1 on subnet 192.168.1.0/24 connected to r1, and pc2 on subnet 192.168.2.0/24 connected to r2.",
+      "Configure a static route on Router r1 to allow host pc1 to ping host pc2 on the remote network.",
+      "Start the Kathará Lab, open pc1's console, and perform a successful ping to pc2 (192.168.2.20)."
+    ]
+  }
+};
+
+function SimulationLabActivityCard({ moduleId, isCompleted, onComplete, handleSelectNextTopic }: SimulationLabActivityCardProps) {
+  const getModuleIndexLocal = (mId: number): number => {
+    const ids = [
+      1782134355228, 1782182808093, 1782181968596, 1782184909611,
+      1782185665993, 1782186311891, 1782186928370, 1782197552474,
+      1782198533015, 1782199846377, 1782200580841, 1782203599448
+    ];
+    return ids.indexOf(mId);
+  };
+
+  const moduleIdx = getModuleIndexLocal(moduleId);
+  const lab = SIMULATION_LAB_DATA[moduleIdx];
+
+  if (!lab) {
+    return (
+      <div className="bg-brand-card/85 border border-brand-border/40 p-6 rounded-2xl text-center italic text-brand-muted text-xs">
+        No simulation lab activity configured for this module.
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-slate-950/65 backdrop-blur-md border border-brand-border/80 rounded-2xl p-6 shadow-2xl animate-scaleIn flex flex-col gap-6 select-none max-w-2xl">
+      <div className="flex justify-between items-start gap-4">
+        <div>
+          <h3 className="text-brand-cyan text-xs font-black uppercase tracking-wider">Simulation Lab Activity</h3>
+          <h4 className="text-lg font-extrabold text-brand-text mt-1">{lab.title}</h4>
+          <p className="text-xs text-brand-muted mt-2 leading-relaxed">{lab.description}</p>
+        </div>
+        {isCompleted ? (
+          <span className="bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 text-[10px] font-black py-1.5 px-3 rounded-full uppercase tracking-wider whitespace-nowrap shadow-md">
+            ✓ Completed
+          </span>
+        ) : (
+          <span className="bg-amber-500/15 border border-amber-500/40 text-amber-400 text-[10px] font-black py-1.5 px-3 rounded-full uppercase tracking-wider whitespace-nowrap shadow-md">
+            Pending Attempt
+          </span>
+        )}
+      </div>
+
+      <div className="border-t border-brand-border/30 pt-4">
+        <h5 className="text-[10px] text-brand-cyan uppercase tracking-wider font-extrabold mb-3">Lab Requirements Checklist</h5>
+        <ul className="space-y-2.5">
+          {lab.requirements.map((req, rIdx) => (
+            <li key={rIdx} className="flex items-start gap-2.5 text-xs text-brand-text/95 leading-relaxed font-semibold">
+              <span className="text-brand-cyan text-xs mt-0.5">•</span>
+              <span>{req}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="flex gap-3 justify-end mt-4 border-t border-brand-border/30 pt-4">
+        {isCompleted && (
+          <button
+            onClick={handleSelectNextTopic}
+            className="bg-slate-900 hover:bg-slate-850 text-brand-muted hover:text-brand-text border border-brand-border/40 text-[10px] font-black py-2.5 px-5 rounded-xl cursor-pointer uppercase tracking-wider transition-colors shrink-0"
+          >
+            Next Topic
+          </button>
+        )}
+        <a
+          href={`/student/simulation?labId=${lab.labId}&moduleId=${moduleId}`}
+          className="bg-brand-cyan hover:bg-brand-cyan/85 text-brand-bg text-[10px] font-black py-2.5 px-6 rounded-xl cursor-pointer uppercase tracking-wider transition-all shadow-lg hover:scale-[1.02] flex items-center gap-1.5 shrink-0"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+          {isCompleted ? "Relaunch Simulation Lab" : "Launch Simulation Lab"}
+        </a>
+      </div>
+    </div>
+  );
+}
+
 interface InteractiveSubnettingActivityProps {
   onComplete: () => void;
   isCompleted: boolean;
@@ -2413,6 +2548,116 @@ export default function StudentCurriculum() {
   const [pretestFullscreenActive, setPretestFullscreenActive] = useState(false);
   const [pretestWarningsLeft, setPretestWarningsLeft] = useState(3);
   const [pretestLocked, setPretestLocked] = useState(false);
+  const [unlockedBadge, setUnlockedBadge] = useState<any | null>(null);
+
+  const checkBadgeEligibility = async (
+    profile: any,
+    mods: any[],
+    doneTopics: Record<number, boolean>,
+    donePretests: Record<number, boolean>
+  ) => {
+    if (!profile) return;
+    const email = profile.email;
+    const alreadyEarnedIds = new Set((profile.earnedBadges || []).map((b: any) => b.badgeId));
+
+    const totalTopicsCount = mods.reduce((acc, mod) => acc + mod.topics.length, 0);
+    let sum = 0;
+    mods.forEach((mod) => {
+      mod.topics.forEach((topic) => {
+        if (doneTopics[topic.id]) {
+          sum += 100;
+        }
+      });
+    });
+    const overallProgress = totalTopicsCount > 0 ? Math.round(sum / totalTopicsCount) : 0;
+
+    const simLabs = ["1782184909611", "1782186928370", "1782197552474", "1782199846377"];
+    const finishedSimCount = simLabs.filter(mId => profile.interactiveScores?.[mId]?.["simulationLab"] >= 80).length;
+    const isSimMaster = finishedSimCount === 4;
+
+    let badgesList: any[] = [];
+    try {
+      const bRes = await fetch("/api/badges");
+      const bData = await bRes.json();
+      if (bData.success) {
+        badgesList = bData.badges;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+
+    if (badgesList.length === 0) return;
+
+    for (const badge of badgesList) {
+      if (alreadyEarnedIds.has(badge.id)) continue;
+
+      let meetsCriteria = false;
+      if (badge.id === "badge-default-competency" && overallProgress >= 80) {
+        meetsCriteria = true;
+      } else if (badge.id === "badge-default-simulation-master" && isSimMaster) {
+        meetsCriteria = true;
+      } else if (badge.id === "badge-default-consistent-learner" && overallProgress >= 50) {
+        meetsCriteria = true;
+      } else if (badge.id === "badge-default-top-3" && overallProgress >= 85) {
+        meetsCriteria = true;
+      } else if (badge.id === "badge-default-top-2" && overallProgress >= 90) {
+        meetsCriteria = true;
+      } else if (badge.id === "badge-default-top-1" && overallProgress >= 95) {
+        meetsCriteria = true;
+      }
+
+      if (meetsCriteria) {
+        setUnlockedBadge(badge);
+        break; 
+      }
+    }
+  };
+
+  const handleClaimBadge = async () => {
+    if (!unlockedBadge) return;
+    const email = localStorage.getItem("userEmail") || "";
+    if (!email) return;
+
+    try {
+      const uRes = await fetch("/api/users");
+      const uData = await uRes.json();
+      if (uData.success) {
+        const profile = uData.users.find((u: any) => u.email.toLowerCase() === email.toLowerCase());
+        if (profile) {
+          const currentEarned = profile.earnedBadges || [];
+          const newEarnedBadge = {
+            badgeId: unlockedBadge.id,
+            awardedAt: new Date().toISOString(),
+            awardedBy: "Automatic Achievement Engine"
+          };
+
+          const updatedEarned = [...currentEarned, newEarnedBadge];
+          const updateRes = await fetch("/api/users", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email,
+              earnedBadges: updatedEarned
+            })
+          });
+
+          const updateData = await updateRes.json();
+          if (updateData.success) {
+            setUnlockedBadge(null);
+            window.location.reload();
+          }
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  useEffect(() => {
+    if (userProfile && modules.length > 0 && Object.keys(completedTopics).length > 0) {
+      checkBadgeEligibility(userProfile, modules, completedTopics, completedPretests);
+    }
+  }, [completedTopics, completedPretests, userProfile, modules]);
 
   const saveProgressToServer = async (updates: any) => {
     const email = localStorage.getItem("userEmail") || "";
@@ -3078,11 +3323,14 @@ export default function StudentCurriculum() {
         const titleUpper = t.title.toUpperCase().trim();
         return !isDiscussionTopic(t.id) &&
                !isInteractiveTopic(t.id) &&
+               !isSimulationTopic(t.id) &&
                titleUpper !== "MODULE DISCUSSION FORUM" &&
                titleUpper !== "INTERACTIVE SUBNETTING ACTIVITY" &&
                titleUpper !== "INTERACTIVE ACTIVITY" &&
+               titleUpper !== "SIMULATION LAB ACTIVITY" &&
                !titleUpper.includes("DISCUSSION") &&
-               !titleUpper.includes("INTERACTIVE");
+               !titleUpper.includes("INTERACTIVE") &&
+               !titleUpper.includes("SIMULATION");
       });
       const totalMaterials = previewTopics.reduce((sum, t) => {
         let count = (t.materials || []).length;
@@ -3391,7 +3639,7 @@ export default function StudentCurriculum() {
 
   useEffect(() => {
     const handleScroll = () => {
-      if (!selectedTopic || isModuleOverviewActive || isInteractiveTopic(selectedTopic.id)) return;
+      if (!selectedTopic || isModuleOverviewActive || isInteractiveTopic(selectedTopic.id) || isSimulationTopic(selectedTopic.id)) return;
       if (!workspaceRef.current) return;
 
       const element = workspaceRef.current;
@@ -3477,7 +3725,7 @@ export default function StudentCurriculum() {
 
   const getTopicProgress = (topic: Topic): number => {
     if (completedTopics[topic.id]) return 100;
-    if (isInteractiveTopic(topic.id)) return 0;
+    if (isInteractiveTopic(topic.id) || isSimulationTopic(topic.id)) return 0;
     const videoMat = getTopicVideoMaterial(topic);
     const isVideoWatched = videoMat ? watchedVideos[videoMat.id] === true : false;
     const scrollVal = scrollProgress[topic.id] || 0;
@@ -3654,15 +3902,20 @@ export default function StudentCurriculum() {
     return topicId >= 99999900 && topicId <= 99999999;
   };
 
+  const isSimulationTopic = (topicId: number): boolean => {
+    return topicId >= 77777700 && topicId <= 77777799;
+  };
+
   const ensureInteractiveActivity = (mods: Module[]): Module[] => {
     if (mods.length === 0) return mods;
     return mods.map((mod) => {
       const idx = getModuleIndex(mod.id);
       const baseTopics = mod.topics.filter(t => 
-        (t.id < 88888800 || t.id > 99999999) &&
+        (t.id < 77777700 || t.id > 99999999) &&
         t.title !== "Module Discussion Forum" &&
         t.title !== "Interactive Subnetting Activity" &&
-        t.title !== "Interactive Activity"
+        t.title !== "Interactive Activity" &&
+        t.title !== "Simulation Lab Activity"
       );
       return {
         ...mod,
@@ -3693,7 +3946,20 @@ export default function StudentCurriculum() {
               }
             ],
             subtopics: []
-          }
+          },
+          ...((idx === 3 || idx === 6 || idx === 7 || idx === 9) ? [{
+            id: 77777700 + idx,
+            title: "Simulation Lab Activity",
+            materials: [
+              {
+                id: 77777710 + idx,
+                type: "text",
+                title: "Simulation Lab Challenge",
+                content: "simulation-lab-placeholder"
+              }
+            ],
+            subtopics: []
+          }] : [])
         ]
       };
     });
@@ -5132,6 +5398,18 @@ export default function StudentCurriculum() {
                             handleSelectNextTopic={handleSelectNextTopic}
                             moduleId={selectedModule!.id}
                           />
+                        ) : isSimulationTopic(selectedTopic!.id) ? (
+                          <SimulationLabActivityCard
+                            moduleId={selectedModule!.id}
+                            isCompleted={completedTopics[77777700 + getModuleIndex(selectedModule!.id)] === true}
+                            onComplete={() => {
+                              const labId = 77777700 + getModuleIndex(selectedModule!.id);
+                              if (!completedTopics[labId]) {
+                                toggleTopicCompletion(labId);
+                              }
+                            }}
+                            handleSelectNextTopic={handleSelectNextTopic}
+                          />
                         ) : isDiscussionTopic(selectedTopic!.id) ? (
                           // MODULE DISCUSSION FORUM VIEW
                           <div className="flex-grow flex flex-col h-full animate-scaleIn">
@@ -5402,7 +5680,7 @@ export default function StudentCurriculum() {
                         )}
                       </div>
 
-                      {selectedTopic && !isInteractiveTopic(selectedTopic.id) && activeMaterials.length > 0 && (
+                      {selectedTopic && !isInteractiveTopic(selectedTopic.id) && !isSimulationTopic(selectedTopic.id) && activeMaterials.length > 0 && (
                         (() => {
                           const videoMaterial = getTopicVideoMaterial(selectedTopic);
                           const isVideoWatched = videoMaterial ? watchedVideos[videoMaterial.id] === true : true;
@@ -5466,6 +5744,44 @@ export default function StudentCurriculum() {
           </div>
         )}
       </main>
+
+      {unlockedBadge && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[999] flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-slate-900 border border-brand-cyan/40 rounded-3xl p-8 max-w-sm w-full text-center flex flex-col items-center gap-5 shadow-2xl shadow-brand-cyan/20 select-none animate-scaleIn">
+            <span className="text-[10px] font-black text-brand-cyan uppercase tracking-widest animate-pulse">New Achievement Unlocked!</span>
+            
+            <div className="w-32 h-32 rounded-full bg-brand-cyan/5 border-2 border-brand-cyan/30 flex items-center justify-center p-4 shadow-lg shadow-brand-cyan/10 relative">
+              <img
+                src={unlockedBadge.imagePath}
+                alt={unlockedBadge.name}
+                className="w-24 h-24 object-contain z-10"
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = 'none';
+                }}
+              />
+              <div className="text-brand-cyan absolute">
+                <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>
+              </div>
+            </div>
+
+            <div>
+              <h3 className="text-lg font-black text-brand-text">{unlockedBadge.name}</h3>
+              <p className="text-[11px] text-brand-muted mt-2 leading-relaxed px-2">{unlockedBadge.description}</p>
+              <div className="mt-3.5 bg-brand-cyan/10 border border-brand-cyan/20 rounded-xl p-2.5">
+                <span className="text-[9px] font-bold text-brand-cyan uppercase tracking-wider block">Award Criteria Reached</span>
+                <span className="text-[10px] text-brand-text/90 font-semibold leading-normal mt-0.5 block">{unlockedBadge.criteria}</span>
+              </div>
+            </div>
+
+            <button
+              onClick={handleClaimBadge}
+              className="mt-2 w-full bg-brand-cyan hover:bg-brand-cyan/85 text-brand-bg text-xs font-black py-3 rounded-2xl cursor-pointer uppercase tracking-wider shadow-lg hover:scale-[1.02] transition-all"
+            >
+              Accept Digital Badge
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

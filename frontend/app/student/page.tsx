@@ -55,6 +55,116 @@ export default function StudentDashboard() {
   const [pretestScores, setPretestScores] = useState<Record<number, number>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [streakDates, setStreakDates] = useState<string[]>([]);
+  const [unlockedBadge, setUnlockedBadge] = useState<any | null>(null);
+
+  const checkBadgeEligibility = async (
+    profile: any,
+    mods: any[],
+    doneTopics: Record<number, boolean>,
+    donePretests: Record<number, boolean>
+  ) => {
+    if (!profile) return;
+    const email = profile.email;
+    const alreadyEarnedIds = new Set((profile.earnedBadges || []).map((b: any) => b.badgeId));
+
+    const totalTopicsCount = mods.reduce((acc, mod) => acc + mod.topics.length, 0);
+    let sum = 0;
+    mods.forEach((mod) => {
+      mod.topics.forEach((topic) => {
+        if (doneTopics[topic.id]) {
+          sum += 100;
+        }
+      });
+    });
+    const overallProgress = totalTopicsCount > 0 ? Math.round(sum / totalTopicsCount) : 0;
+
+    const simLabs = ["1782184909611", "1782186928370", "1782197552474", "1782199846377"];
+    const finishedSimCount = simLabs.filter(mId => profile.interactiveScores?.[mId]?.["simulationLab"] >= 80).length;
+    const isSimMaster = finishedSimCount === 4;
+
+    let badgesList: any[] = [];
+    try {
+      const bRes = await fetch("/api/badges");
+      const bData = await bRes.json();
+      if (bData.success) {
+        badgesList = bData.badges;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+
+    if (badgesList.length === 0) return;
+
+    for (const badge of badgesList) {
+      if (alreadyEarnedIds.has(badge.id)) continue;
+
+      let meetsCriteria = false;
+      if (badge.id === "badge-default-competency" && overallProgress >= 80) {
+        meetsCriteria = true;
+      } else if (badge.id === "badge-default-simulation-master" && isSimMaster) {
+        meetsCriteria = true;
+      } else if (badge.id === "badge-default-consistent-learner" && overallProgress >= 50) {
+        meetsCriteria = true;
+      } else if (badge.id === "badge-default-top-3" && overallProgress >= 85) {
+        meetsCriteria = true;
+      } else if (badge.id === "badge-default-top-2" && overallProgress >= 90) {
+        meetsCriteria = true;
+      } else if (badge.id === "badge-default-top-1" && overallProgress >= 95) {
+        meetsCriteria = true;
+      }
+
+      if (meetsCriteria) {
+        setUnlockedBadge(badge);
+        break; 
+      }
+    }
+  };
+
+  const handleClaimBadge = async () => {
+    if (!unlockedBadge) return;
+    const email = localStorage.getItem("userEmail") || "";
+    if (!email) return;
+
+    try {
+      const uRes = await fetch("/api/users");
+      const uData = await uRes.json();
+      if (uData.success) {
+        const profile = uData.users.find((u: any) => u.email.toLowerCase() === email.toLowerCase());
+        if (profile) {
+          const currentEarned = profile.earnedBadges || [];
+          const newEarnedBadge = {
+            badgeId: unlockedBadge.id,
+            awardedAt: new Date().toISOString(),
+            awardedBy: "Automatic Achievement Engine"
+          };
+
+          const updatedEarned = [...currentEarned, newEarnedBadge];
+          const updateRes = await fetch("/api/users", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email,
+              earnedBadges: updatedEarned
+            })
+          });
+
+          const updateData = await updateRes.json();
+          if (updateData.success) {
+            setUnlockedBadge(null);
+            window.location.reload();
+          }
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  useEffect(() => {
+    if (userProfile && modules.length > 0 && Object.keys(completedTopics).length > 0) {
+      checkBadgeEligibility(userProfile, modules, completedTopics, completedPretests);
+    }
+  }, [completedTopics, completedPretests, userProfile, modules]);
 
   useEffect(() => {
     const savedName = localStorage.getItem("userName");
@@ -663,6 +773,44 @@ export default function StudentDashboard() {
           </div>
         )}
       </main>
+
+      {unlockedBadge && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[999] flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-slate-900 border border-brand-cyan/40 rounded-3xl p-8 max-w-sm w-full text-center flex flex-col items-center gap-5 shadow-2xl shadow-brand-cyan/20 select-none animate-scaleIn">
+            <span className="text-[10px] font-black text-brand-cyan uppercase tracking-widest animate-pulse">New Achievement Unlocked!</span>
+            
+            <div className="w-32 h-32 rounded-full bg-brand-cyan/5 border-2 border-brand-cyan/30 flex items-center justify-center p-4 shadow-lg shadow-brand-cyan/10 relative">
+              <img
+                src={unlockedBadge.imagePath}
+                alt={unlockedBadge.name}
+                className="w-24 h-24 object-contain z-10"
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = 'none';
+                }}
+              />
+              <div className="text-brand-cyan absolute">
+                <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>
+              </div>
+            </div>
+
+            <div>
+              <h3 className="text-lg font-black text-brand-text">{unlockedBadge.name}</h3>
+              <p className="text-[11px] text-brand-muted mt-2 leading-relaxed px-2">{unlockedBadge.description}</p>
+              <div className="mt-3.5 bg-brand-cyan/10 border border-brand-cyan/20 rounded-xl p-2.5">
+                <span className="text-[9px] font-bold text-brand-cyan uppercase tracking-wider block">Award Criteria Reached</span>
+                <span className="text-[10px] text-brand-text/90 font-semibold leading-normal mt-0.5 block">{unlockedBadge.criteria}</span>
+              </div>
+            </div>
+
+            <button
+              onClick={handleClaimBadge}
+              className="mt-2 w-full bg-brand-cyan hover:bg-brand-cyan/85 text-brand-bg text-xs font-black py-3 rounded-2xl cursor-pointer uppercase tracking-wider shadow-lg hover:scale-[1.02] transition-all"
+            >
+              Accept Digital Badge
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

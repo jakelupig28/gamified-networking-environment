@@ -121,7 +121,7 @@ export default function StudentAchievementsPage() {
                     </div>
                     <p className="text-sm font-semibold text-brand-muted mb-1">No badges earned yet</p>
                     <p className="text-xs text-brand-muted/70 max-w-xs mx-auto">
-                      Keep up with your coursework and interactive activities. Badges are awarded by your professor for outstanding achievements!
+                      Keep up with your coursework and interactive activities. Badges are automatically awarded once you meet the required competency scores or challenge requirements!
                     </p>
                   </div>
                 ) : (

@@ -95,7 +95,7 @@ const getInteractiveModuleDetails = (mId: string | number, scores: any) => {
 export default function ProfessorAnalytics() {
   const [activeTab, setActiveTab] = useState<"roster" | "heatmaps" | "security">("roster");
   const [selectedModuleId, setSelectedModuleId] = useState<string>("");
-  const [assessmentType, setAssessmentType] = useState<"pretest" | "interactive">("pretest");
+  const [assessmentType, setAssessmentType] = useState<"pretest" | "interactive" | "simulation">("pretest");
   const [selectedGridCell, setSelectedGridCell] = useState<any | null>(null);
   const [modules, setModules] = useState<any[]>([]);
   const [students, setStudents] = useState<any[]>([]);
@@ -352,6 +352,17 @@ export default function ProfessorAnalytics() {
                         >
                           Interactive Activities
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => { setAssessmentType("simulation"); setSelectedGridCell(null); }}
+                          className={`px-4 text-xs font-bold transition-all ${
+                            assessmentType === "simulation"
+                              ? "bg-brand-cyan text-brand-bg font-extrabold"
+                              : "bg-brand-bg/30 text-brand-muted hover:text-brand-text"
+                          }`}
+                        >
+                          Simulation Labs
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -369,7 +380,7 @@ export default function ProfessorAnalytics() {
                   {/* Left: Grid */}
                   <div className="lg:col-span-2 flex flex-col gap-4">
                     <h3 className="text-sm font-bold text-brand-cyan uppercase tracking-wider">
-                      {assessmentType === "pretest" ? "Pre-test Mistakes Grid" : "Interactive Task Items Grid"}
+                      {assessmentType === "pretest" ? "Pre-test Mistakes Grid" : assessmentType === "interactive" ? "Interactive Task Items Grid" : "Simulation Lab Activity Grid"}
                     </h3>
 
                     {assessmentType === "pretest" && (() => {
@@ -544,6 +555,131 @@ export default function ProfessorAnalytics() {
                         </div>
                       );
                     })()}
+
+                    {assessmentType === "simulation" && (() => {
+                      const simLabConfigs: Record<number, { title: string; items: { id: string; label: string }[] }> = {
+                        3: {
+                          title: "IPv4 Static Addressing Challenge",
+                          items: [
+                            { id: "pc1-ip", label: "No host PC configured with IP 192.168.1.10" },
+                            { id: "pc2-ip", label: "No host PC configured with IP 192.168.1.20" },
+                            { id: "connectivity", label: "No physical cabling link connects PC1 and PC2" },
+                            { id: "ping-test", label: "Ping test between PC1 and PC2 (192.168.1.20) was not completed successfully" }
+                          ]
+                        },
+                        6: {
+                          title: "Local Host Cabling Challenge",
+                          items: [
+                            { id: "pc1-sw1-conn", label: "PC and Switch are not connected" },
+                            { id: "straight-cable", label: "Incorrect cable type used (requires Straight-Through cable)" },
+                            { id: "pc1-ip-10", label: "PC eth0 interface not configured with IP 10.0.0.10" }
+                          ]
+                        },
+                        7: {
+                          title: "Gateway Router Configuration Challenge",
+                          items: [
+                            { id: "pc1-r1-conn", label: "PC and Router are not cabled" },
+                            { id: "router-gateway-ip", label: "Router R1 eth0 gateway interface not configured with IP 192.168.1.1" },
+                            { id: "pc1-ip-gateway", label: "PC PC1 interface not configured with IP 192.168.1.10" },
+                            { id: "ping-gateway", label: "PC1 did not successfully ping the gateway (192.168.1.1)" }
+                          ]
+                        },
+                        9: {
+                          title: "Inter-network Static Routing Challenge",
+                          items: [
+                            { id: "routers-connected", label: "Routers R1 and R2 are not interconnected by cabling link" },
+                            { id: "pc1-ip", label: "No host PC configured with IP 192.168.1.10" },
+                            { id: "pc2-ip", label: "No host PC configured with IP 192.168.2.20" },
+                            { id: "ping-across", label: "Ping across network subnets to PC2 (192.168.2.20) was not successful" }
+                          ]
+                        }
+                      };
+
+                      const ids = [
+                        1782134355228, 1782182808093, 1782181968596, 1782184909611,
+                        1782185665993, 1782186311891, 1782186928370, 1782197552474,
+                        1782198533015, 1782199846377, 1782200580841, 1782203599448
+                      ];
+                      const moduleIdx = ids.indexOf(Number(selectedModuleId));
+                      const config = simLabConfigs[moduleIdx];
+
+                      if (!config) {
+                        return (
+                          <div className="text-center py-10 text-brand-muted italic text-xs border border-brand-border/30 rounded-xl bg-brand-bg/10">
+                            No Simulation Lab activity is configured for this module.
+                          </div>
+                        );
+                      }
+
+                      const attempts = students.filter(s => s.status === "admitted" && s.interactiveScores?.[selectedModuleId]?.["simulationLab"] !== undefined);
+                      const totalAttempts = attempts.length;
+
+                      return (
+                        <div className="space-y-6">
+                          <div className="bg-brand-bg/20 border border-brand-border/40 rounded-xl p-4">
+                            <div className="flex justify-between items-center mb-3">
+                              <h4 className="text-xs font-bold text-brand-cyan uppercase tracking-wider">
+                                Lab Challenge: {config.title}
+                              </h4>
+                              <span className="text-[10px] text-brand-muted font-mono">{totalAttempts} submissions</span>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              {config.items.map((item, itemIdx) => {
+                                const incorrectCount = attempts.filter(s => {
+                                  const mistakesList = s.interactiveMistakes?.[selectedModuleId]?.["simulationLab"] || [];
+                                  return mistakesList.some((m: any) => m.item === item.label);
+                                }).length;
+
+                                const errRate = totalAttempts > 0 ? Math.round((incorrectCount / totalAttempts) * 100) : 0;
+                                const isSelected = selectedGridCell?.type === "simulation" && selectedGridCell?.id === item.id;
+
+                                let colorClass = "bg-emerald-500/5 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/10";
+                                if (errRate > 20 && errRate <= 50) {
+                                  colorClass = "bg-amber-500/10 border-amber-500/25 text-amber-400 hover:bg-amber-500/15";
+                                } else if (errRate > 50) {
+                                  colorClass = "bg-rose-500/15 border-rose-500/30 text-rose-400 hover:bg-rose-500/20";
+                                }
+
+                                return (
+                                  <button
+                                    key={item.id}
+                                    onClick={() => setSelectedGridCell({
+                                      type: "simulation",
+                                      id: item.id,
+                                      taskTitle: config.title,
+                                      itemLabel: item.label,
+                                      correctAnswer: "Successful topology validation check passed",
+                                      errRate,
+                                      incorrectCount,
+                                      totalAttempts,
+                                      attempts,
+                                      taskKey: "simulationLab"
+                                    })}
+                                    className={`text-left p-3.5 rounded-xl border-2 transition-all flex flex-col justify-between h-28 cursor-pointer ${colorClass} ${
+                                      isSelected ? "ring-2 ring-brand-cyan border-brand-cyan scale-102" : ""
+                                    }`}
+                                  >
+                                    <div className="w-full">
+                                      <div className="flex justify-between items-center text-[9px] font-bold uppercase tracking-wider opacity-85">
+                                        <span>Check {itemIdx + 1}</span>
+                                        <span className="font-mono">{errRate}% Error</span>
+                                      </div>
+                                      <p className="text-xs font-semibold mt-1.5 text-brand-text truncate leading-relaxed">
+                                        {item.label}
+                                      </p>
+                                    </div>
+                                    <div className="text-[9px] opacity-75 font-medium">
+                                      {incorrectCount} student(s) failed this verification
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* Right: Details panel */}
@@ -559,6 +695,15 @@ export default function ProfessorAnalytics() {
                           if (mistake) {
                             const ans = mistake.userAnswer || "Unanswered";
                             errorDistribution[ans] = (errorDistribution[ans] || 0) + 1;
+                          }
+                        });
+                      } else if (type === "simulation") {
+                        attempts.forEach((s: any) => {
+                          const mistakesList = s.interactiveMistakes?.[selectedModuleId]?.["simulationLab"] || [];
+                          const mistake = mistakesList.find((m: any) => m.item === selectedGridCell.itemLabel);
+                          if (mistake) {
+                            const ans = "Validation Check Failed";
+                            errorDistribution[ans] = (errorDistribution[ans] || 0) + mistake.count;
                           }
                         });
                       } else {
@@ -578,7 +723,7 @@ export default function ProfessorAnalytics() {
                         <div className="flex flex-col gap-5 animate-all duration-300">
                           <div>
                             <span className="text-[10px] text-brand-cyan uppercase tracking-wider font-extrabold block mb-1">
-                              {type === "pretest" ? "Pre-test Question Detail" : `Task Detail: ${selectedGridCell.taskTitle}`}
+                              {type === "pretest" ? "Pre-test Question Detail" : type === "simulation" ? `Simulation Check Detail: ${selectedGridCell.taskTitle}` : `Task Detail: ${selectedGridCell.taskTitle}`}
                             </span>
                             <h4 className="text-sm font-bold text-brand-text leading-relaxed">
                               {type === "pretest" ? selectedGridCell.question : selectedGridCell.itemLabel}

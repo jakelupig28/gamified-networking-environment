@@ -2,15 +2,78 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 
+const MODULE_TOPICS_MAP = [
+  { "id": 1782134355228, "topics": [1782134355229, 1782134356229, 1782134357229, 1782134358229, 1782134359229, 1782134360229] },
+  { "id": 1782182808093, "topics": [1782182808094, 1782182809094, 1782182810094, 1782182811094, 1782182812094] },
+  { "id": 1782181968596, "topics": [1782181968597, 1782181969597, 1782181970597, 1782181971597] },
+  { "id": 1782184909611, "topics": [1782184909612, 1782184910612, 1782184911612, 1782184912612, 1782184913612, 1782184914612, 1782184915612] },
+  { "id": 1782185665993, "topics": [1782185665994, 1782185666994, 1782185667994, 1782185668994] },
+  { "id": 1782186311891, "topics": [1782186311892, 1782186312892, 1782186313892, 1782186314892] },
+  { "id": 1782186928370, "topics": [1782186928371, 1782186929371, 1782186930371, 1782186931371] },
+  { "id": 1782197552474, "topics": [1782197552475, 1782197553475, 1782197554475, 1782197555475] },
+  { "id": 1782198533015, "topics": [1782198533016, 1782198534016, 1782198535016, 1782198536016, 1782198537016] },
+  { "id": 1782199846377, "topics": [1782199846378, 1782199848378, 1782199847378, 1782199849378, 1782199850378] },
+  { "id": 1782200580841, "topics": [1782200580842, 1782200581842, 1782200582842, 1782200583842] },
+  { "id": 1782203599448, "topics": [1782203599449, 1782203600449, 1782203601449, 1782203602449, 1782203603449] }
+];
+
+function calculateUserXp(user: any, discussions: any[]) {
+  let xp = 0;
+  
+  // 1. Taking pre-test: +100 XP each
+  const pretestScores = user.pretestScores || {};
+  const pretestCount = Object.keys(pretestScores).length;
+  xp += pretestCount * 100;
+
+  // 2. Participating in discussion forum: +50 XP each
+  const userEmail = (user.email || "").toLowerCase();
+  const discCount = discussions.filter((d: any) => d.email && d.email.toLowerCase() === userEmail).length;
+  xp += discCount * 50;
+
+  // 3. Taking interactive activities: +150 XP each
+  const completedTopics = user.completedTopics || {};
+  const interactiveCount = Object.keys(completedTopics).filter(k => k.startsWith("999999") && completedTopics[k] === true).length;
+  xp += interactiveCount * 150;
+
+  // 4. Finishing modules: +300 XP each
+  MODULE_TOPICS_MAP.forEach(mod => {
+    const finished = mod.topics.every(tid => completedTopics[String(tid)] === true || completedTopics[Number(tid)] === true);
+    if (finished) {
+      xp += 300;
+    }
+  });
+
+  // 5. Submitting lab activity packet tracer files: +200 XP each
+  const labSubmissions = user.labSubmissions || {};
+  const labCount = Object.keys(labSubmissions).length;
+  xp += labCount * 200;
+
+  return xp;
+}
+
 export async function GET() {
   try {
     const filePath = path.join(process.cwd(), 'data', 'users.json');
     const fileData = fs.readFileSync(filePath, 'utf8');
     const users = JSON.parse(fileData);
+
+    // Load discussions
+    const discussionsPath = path.join(process.cwd(), 'data', 'discussions.json');
+    let discussions: any[] = [];
+    if (fs.existsSync(discussionsPath)) {
+      try {
+        discussions = JSON.parse(fs.readFileSync(discussionsPath, 'utf8'));
+      } catch (e) {
+        console.error('Error reading discussions:', e);
+      }
+    }
     
-    // Omit passwords for security
+    // Omit passwords for security and attach dynamic XP
     const safeUsers = users.map((u: any) => {
       const { password, ...safeUser } = u;
+      if (safeUser.role === 'Student') {
+        safeUser.xp = calculateUserXp(safeUser, discussions);
+      }
       return safeUser;
     });
 
@@ -109,9 +172,25 @@ export async function PUT(req: Request) {
       users[userIdx].name = `${titlePart}${fName.trim()} ${middlePart}${lName.trim()}`.trim() || users[userIdx].name;
     }
 
+    // Read discussions to return calculated user with xp
+    const discussionsPath = path.join(process.cwd(), 'data', 'discussions.json');
+    let discussions: any[] = [];
+    if (fs.existsSync(discussionsPath)) {
+      try {
+        discussions = JSON.parse(fs.readFileSync(discussionsPath, 'utf8'));
+      } catch (e) {
+        console.error('Error reading discussions:', e);
+      }
+    }
+    const safeUser = { ...users[userIdx] };
+    delete safeUser.password;
+    if (safeUser.role === 'Student') {
+      safeUser.xp = calculateUserXp(safeUser, discussions);
+    }
+
     fs.writeFileSync(filePath, JSON.stringify(users, null, 2));
 
-    return NextResponse.json({ success: true, message: 'Profile updated successfully', user: users[userIdx] });
+    return NextResponse.json({ success: true, message: 'Profile updated successfully', user: safeUser });
   } catch (error) {
     return NextResponse.json({ success: false, message: 'Server error updating profile' }, { status: 500 });
   }

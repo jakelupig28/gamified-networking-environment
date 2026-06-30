@@ -1,0 +1,38 @@
+[
+  {
+    "id": "pt-lab-1",
+    "title": "IPv4 Subnetting & IP Configuration",
+    "description": "Configure static IPv4 addresses, subnet masks, and default gateways on a dual-subnet local network topology to ensure peer connectivity.",
+    "moduleId": 1782184909611,
+    "competency": "Subnetting & IPv4 Addressing",
+    "templateFile": "/labs/ipv4-subnetting-challenge.pka",
+    "difficulty": "Easy"
+  },
+  {
+    "id": "pt-lab-2",
+    "title": "VLAN Trunking & Switch Routing",
+    "description": "Configure switch trunks, access ports, and VLAN membership (VLAN 10, VLAN 20) on Catalyst Switches, verifying frames isolation.",
+    "moduleId": 1782186311891,
+    "competency": "Ethernet & Switching (VLANs)",
+    "templateFile": "/labs/vlan-trunking-switching.pka",
+    "difficulty": "Medium"
+  },
+  {
+    "id": "pt-lab-3",
+    "title": "Basic Gateway Static Routing",
+    "description": "Establish point-to-point static router hops between corporate and branch segment gateways. Test end-to-end packet transmission.",
+    "moduleId": 1782199846377,
+    "competency": "Routing Protocols & Static Routing",
+    "templateFile": "/labs/basic-static-routing.pka",
+    "difficulty": "Medium"
+  },
+  {
+    "id": "pt-lab-4",
+    "title": "Advanced Static Route Redundancy",
+    "description": "Implement backup floating static routes with high administrative distance for failover, testing link cut scenarios.",
+    "moduleId": 1782203599448,
+    "competency": "Routing Protocols & Static Routing",
+    "templateFile": "/labs/advanced-redundant-routing.pka",
+    "difficulty": "Hard"
+  }
+]

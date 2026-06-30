@@ -1,0 +1,302 @@
+[
+  {
+    "id": 1782134355228,
+    "title": "Introduction to Networking",
+    "topics": [
+      {
+        "id": 1782134355229,
+        "title": "1. IMPACT OF NETWORKS"
+      },
+      {
+        "id": 1782134356229,
+        "title": "2. DATA NETWORK COMPONENTS"
+      },
+      {
+        "id": 1782134357229,
+        "title": "3. CONVERGED NETWORKS"
+      },
+      {
+        "id": 1782134358229,
+        "title": "4. NETWORK ARCHITECTURES"
+      },
+      {
+        "id": 1782134359229,
+        "title": "5. SCOPE OF NETWORKS: LANS AND WANS"
+      },
+      {
+        "id": 1782134360229,
+        "title": "15 KEY TERMINOLOGIES TO REMEMBER"
+      }
+    ]
+  },
+  {
+    "id": 1782182808093,
+    "title": "Communicating Over The Internet Part 1",
+    "topics": [
+      {
+        "id": 1782182808094,
+        "title": "1. STRUCTURE OF A NETWORK"
+      },
+      {
+        "id": 1782182809094,
+        "title": "2. PROTOCOLS IN NETWORK COMMUNICATION"
+      },
+      {
+        "id": 1782182810094,
+        "title": "3. NETWORK MODELS"
+      },
+      {
+        "id": 1782182811094,
+        "title": "4. OSI REFERENCE MODEL"
+      },
+      {
+        "id": 1782182812094,
+        "title": "SUMMARY & REFERENCES"
+      }
+    ]
+  },
+  {
+    "id": 1782181968596,
+    "title": "Communicating Over The Internet Part 2",
+    "topics": [
+      {
+        "id": 1782181968597,
+        "title": "5. TCP/IP PROTOCOL SUITE"
+      },
+      {
+        "id": 1782181969597,
+        "title": "6. TYPES OF NETWORK TOPOLOGY"
+      },
+      {
+        "id": 1782181970597,
+        "title": "7. NETWORKING STANDARDS AND ORGANIZATIONS"
+      },
+      {
+        "id": 1782181971597,
+        "title": "SUMMARY & REFERENCES"
+      }
+    ]
+  },
+  {
+    "id": 1782184909611,
+    "title": "Addressing IPv4",
+    "topics": [
+      {
+        "id": 1782184909612,
+        "title": "1. IP ADDRESS CONCEPTS"
+      },
+      {
+        "id": 1782184910612,
+        "title": "2. CLASSIFICATIONS OF IPV4 ADDRESS"
+      },
+      {
+        "id": 1782184911612,
+        "title": "3. THE SUBNETTING PROCESS"
+      },
+      {
+        "id": 1782184912612,
+        "title": "4. CLASSFUL SUBNETTING"
+      },
+      {
+        "id": 1782184913612,
+        "title": "5. CLASSLESS SUBNETTING"
+      },
+      {
+        "id": 1782184914612,
+        "title": "(VLSM)"
+      },
+      {
+        "id": 1782184915612,
+        "title": "SUMMARY & REFERENCES"
+      }
+    ]
+  },
+  {
+    "id": 1782185665993,
+    "title": "Ethernet Part 1",
+    "topics": [
+      {
+        "id": 1782185665994,
+        "title": "1. COMMON NETWORKING CABLE/MEDIA"
+      },
+      {
+        "id": 1782185666994,
+        "title": "2. TYPES OF CONNECTIONS IN A LAN"
+      },
+      {
+        "id": 1782185667994,
+        "title": "3. DESIGN AN ADDRESSING SCHEME"
+      },
+      {
+        "id": 1782185668994,
+        "title": "SUMMARY & REFERENCES"
+      }
+    ]
+  },
+  {
+    "id": 1782186311891,
+    "title": "Ethernet Part 2",
+    "topics": [
+      {
+        "id": 1782186311892,
+        "title": "1. IMPORTANCE OF NETWORK DESIGNS"
+      },
+      {
+        "id": 1782186312892,
+        "title": "2. ETHERNET CABLE FABRICATION PROCEDURE"
+      },
+      {
+        "id": 1782186313892,
+        "title": "3. STRAIGHT-THROUGH AND CROSS-OVER CABLES"
+      },
+      {
+        "id": 1782186314892,
+        "title": "SUMMARY & REFERENCES"
+      }
+    ]
+  },
+  {
+    "id": 1782186928370,
+    "title": "Network Configuration",
+    "topics": [
+      {
+        "id": 1782186928371,
+        "title": "1. PACKET TRACER INTERFACE"
+      },
+      {
+        "id": 1782186929371,
+        "title": "2. NETWORKING DEVICES AND CABLING"
+      },
+      {
+        "id": 1782186930371,
+        "title": "3. ROUTER CONFIGURATION MODES"
+      },
+      {
+        "id": 1782186931371,
+        "title": "4. MAKING A SIMPLE NETWORK TOPOLOGY"
+      }
+    ]
+  },
+  {
+    "id": 1782197552474,
+    "title": "Basic Router Configuration",
+    "topics": [
+      {
+        "id": 1782197552475,
+        "title": "1. ROLE OF INTERNETWORK OPERATING SYSTEM (IOS)"
+      },
+      {
+        "id": 1782197553475,
+        "title": "2. USING COMMAND LINE INTERFACE (CLI)"
+      },
+      {
+        "id": 1782197554475,
+        "title": "3. COMMON TESTING UTILITIES"
+      },
+      {
+        "id": 1782197555475,
+        "title": "SUMMARY & REFERENCES"
+      }
+    ]
+  },
+  {
+    "id": 1782198533015,
+    "title": "Routing Protocol Concepts",
+    "topics": [
+      {
+        "id": 1782198533016,
+        "title": "A Comprehensive Guide to Router Internals, Routing Tables, and Packet Switching"
+      },
+      {
+        "id": 1782198534016,
+        "title": "ROUTER AS A COMPUTER"
+      },
+      {
+        "id": 1782198535016,
+        "title": "ROUTING TABLE STRUCTURE"
+      },
+      {
+        "id": 1782198536016,
+        "title": "ROUTER PATHS AND PACKET SWITCHING"
+      },
+      {
+        "id": 1782198537016,
+        "title": "SUMMARY: KEY TAKEAWAYS"
+      }
+    ]
+  },
+  {
+    "id": 1782199846377,
+    "title": "Static Routing Part 1",
+    "topics": [
+      {
+        "id": 1782199846378,
+        "title": "A Comprehensive Guide to Router Roles, Interfaces, and CDP"
+      },
+      {
+        "id": 1782199848378,
+        "title": "ROUTER INTERFACES"
+      },
+      {
+        "id": 1782199847378,
+        "title": "GENERAL ROLE OF THE ROUTER"
+      },
+      {
+        "id": 1782199849378,
+        "title": "ROUTING TABLE AND CDP PROTOCOL"
+      },
+      {
+        "id": 1782199850378,
+        "title": "SUMMARY: KEY TAKEAWAYS"
+      }
+    ]
+  },
+  {
+    "id": 1782200580841,
+    "title": "Static Routing Part 2",
+    "topics": [
+      {
+        "id": 1782200580842,
+        "title": "A Comprehensive Guide to Static and Default Routes"
+      },
+      {
+        "id": 1782200581842,
+        "title": "STATIC ROUTES WITH EXIT INTERFACES"
+      },
+      {
+        "id": 1782200582842,
+        "title": "SUMMARY AND DEFAULT ROUTE"
+      },
+      {
+        "id": 1782200583842,
+        "title": "SUMMARY: KEY TAKEAWAYS"
+      }
+    ]
+  },
+  {
+    "id": 1782203599448,
+    "title": "Advance Static Routing",
+    "topics": [
+      {
+        "id": 1782203599449,
+        "title": "1. ADVANCED STATIC ROUTING CONCEPTS"
+      },
+      {
+        "id": 1782203600449,
+        "title": "2. DEFAULT ROUTE CONFIGURATION"
+      },
+      {
+        "id": 1782203601449,
+        "title": "3. TELNET AND REMOTE MANAGEMENT"
+      },
+      {
+        "id": 1782203602449,
+        "title": "4. DHCP (DYNAMIC HOST CONFIGURATION PROTOCOL)"
+      },
+      {
+        "id": 1782203603449,
+        "title": "5. COMPREHENSIVE LAB SCENARIOS"
+      }
+    ]
+  }
+]

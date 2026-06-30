@@ -2563,7 +2563,7 @@ export default function StudentCurriculum() {
     const totalTopicsCount = mods.reduce((acc, mod) => acc + mod.topics.length, 0);
     let sum = 0;
     mods.forEach((mod) => {
-      mod.topics.forEach((topic) => {
+      mod.topics.forEach((topic: any) => {
         if (doneTopics[topic.id]) {
           sum += 100;
         }
@@ -3961,7 +3961,7 @@ export default function StudentCurriculum() {
             subtopics: []
           }] : [])
         ]
-      };
+      } as any;
     });
   };
 

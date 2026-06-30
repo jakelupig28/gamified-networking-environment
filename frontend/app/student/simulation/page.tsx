@@ -13,6 +13,9 @@ type NetworkNode = {
   y: number;
   interfaces: { name: string; ip: string; subnet: string; gateway: string }[];
   config: string[]; // Mock CLI command configs
+  dhcpPools?: any[];
+  dnsServer?: string;
+  domainName?: string;
 };
 
 type Connection = {
@@ -447,13 +450,13 @@ export default function SimulationLab() {
     });
   };
 
-  const checkTopologyConnectivity = (startNodeId: string, endNodeId: string): boolean => {
+  const checkTopologyConnectivity = (startNodeId: string, endNodeId?: string): any => {
     const visited = new Set<string>();
     const queue = [startNodeId];
     
     while (queue.length > 0) {
       const current = queue.shift()!;
-      if (current === endNodeId) return true;
+      if (endNodeId && current === endNodeId) return true;
       visited.add(current);
 
       connections.forEach(c => {
@@ -465,7 +468,8 @@ export default function SimulationLab() {
       });
     }
 
-    return false;
+    if (endNodeId) return false;
+    return Array.from(visited);
   };
 
   const getLiveProgress = () => {
@@ -1321,7 +1325,7 @@ export default function SimulationLab() {
 
     // CABLE CONNECTION DRAG DROP
     if (type && type.startsWith("cable")) {
-      let droppedNode = null;
+      let droppedNode: any = null;
       let minDistance = Infinity;
       nodes.forEach(n => {
         const dx = n.x - x;

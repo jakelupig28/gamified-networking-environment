@@ -10,10 +10,8 @@ export default function Footer() {
         </div>
         
         <div className="flex items-center gap-8 opacity-90">
-          <Link href="#" className="hover:text-brand-cyan transition-colors">Academic Integrity</Link>
-          <Link href="#" className="hover:text-brand-cyan transition-colors">Research Library</Link>
-          <Link href="#" className="hover:text-brand-cyan transition-colors">Syllabus Hub</Link>
-          <Link href="#" className="hover:text-brand-cyan transition-colors">Contact Support</Link>
+          <Link href="/privacy" className="hover:text-brand-cyan transition-colors">Privacy Policy</Link>
+          <Link href="/terms" className="hover:text-brand-cyan transition-colors">Terms & Conditions</Link>
         </div>
       </div>
     </footer>

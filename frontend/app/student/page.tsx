@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import Sidebar from "@/components/Sidebar";
+import { COMPETENCIES_CONFIG, calculateCompetencyScore, getLevelInfo, MODULE_TOPICS_MAP } from "@/utils/competencies";
 type MaterialType = "text" | "video" | "image" | "file";
 
 type Material = {
@@ -29,7 +30,7 @@ type Module = {
   id: number;
   title: string;
   topics: Topic[];
-  pretest?: any[];
+  pretest?: unknown[];
 };
 
 type UserProfile = {
@@ -43,6 +44,15 @@ type UserProfile = {
   admittedTerm?: string;
   status?: string;
   rejectMessage?: string;
+  completedTopics?: Record<string, boolean>;
+  pretestScores?: Record<string, number>;
+  interactiveScores?: Record<string, Record<string, number>>;
+  labSubmissions?: Record<string, { score: number }>;
+  streakDates?: string[];
+  watchedVideos?: Record<string, boolean>;
+  completedPretests?: Record<string, boolean>;
+  earnedBadges?: { badgeId: string; awardedAt: string; awardedBy: string }[];
+  xp?: number;
 };
 
 export default function StudentDashboard() {
@@ -55,17 +65,86 @@ export default function StudentDashboard() {
   const [pretestScores, setPretestScores] = useState<Record<number, number>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [streakDates, setStreakDates] = useState<string[]>([]);
-  const [unlockedBadge, setUnlockedBadge] = useState<any | null>(null);
+  interface BadgeConfig {
+    id: string;
+    name: string;
+    description?: string;
+    criteria?: string;
+    imagePath?: string;
+  }
+  const [unlockedBadge, setUnlockedBadge] = useState<BadgeConfig | null>(null);
+
+  const getModuleIndex = (moduleId: number): number => {
+    const ids = [
+      1782134355228, // Introduction to Networking
+      1782182808093, // Communicating Over The InternetPart 1
+      1782181968596, // Communicating Over The Internet Part 2
+      1782184909611, // Addressing IPv4
+      1782185665993, // Ethernet Part 1
+      1782186311891, // Ethernet Part 2
+      1782186928370, // Network Configuration
+      1782197552474, // Basic Router Configuration
+      1782198533015, // Routing Protocol Concepts
+      1782199846377, // Static Routing Part 1
+      1782200580841, // Static Routing Part 2
+      1782203599448  // Advance Static Routing
+    ];
+    const idx = ids.indexOf(moduleId);
+    return idx !== -1 ? idx : 0;
+  };
+
+  const ensureInteractiveActivity = (mods: Module[]): Module[] => {
+    if (mods.length === 0) return mods;
+    return mods.map((mod) => {
+      const idx = getModuleIndex(mod.id);
+      const newTopics = mod.topics.filter(t => 
+        (t.id < 88888800 || t.id > 99999999) &&
+        t.title !== "Module Discussion Forum" &&
+        t.title !== "Interactive Subnetting Activity" &&
+        t.title !== "Interactive Activity"
+      );
+      newTopics.push({
+        id: 88888800 + idx,
+        title: "Module Discussion Forum",
+        materials: [
+          {
+            id: 88888810 + idx,
+            type: "text",
+            title: "Module Discussion",
+            content: "discussion-forum-placeholder"
+          }
+        ],
+        subtopics: []
+      });
+      newTopics.push({
+        id: 99999900 + idx,
+        title: "Interactive Activity",
+        materials: [
+          {
+            id: 99999910 + idx,
+            type: "text",
+            title: "Hands-on Exercises",
+            content: "interactive-activity-placeholder"
+          }
+        ],
+        subtopics: []
+      });
+      return {
+        ...mod,
+        topics: newTopics
+      };
+    });
+  };
 
   const checkBadgeEligibility = async (
-    profile: any,
-    mods: any[],
+    profile: UserProfile,
+    mods: Module[],
     doneTopics: Record<number, boolean>,
     donePretests: Record<number, boolean>
   ) => {
     if (!profile) return;
     const email = profile.email;
-    const alreadyEarnedIds = new Set((profile.earnedBadges || []).map((b: any) => b.badgeId));
+    const alreadyEarnedIds = new Set((profile.earnedBadges || []).map((b: { badgeId: string }) => b.badgeId));
 
     const totalTopicsCount = mods.reduce((acc, mod) => acc + mod.topics.length, 0);
     let sum = 0;
@@ -79,10 +158,18 @@ export default function StudentDashboard() {
     const overallProgress = totalTopicsCount > 0 ? Math.round(sum / totalTopicsCount) : 0;
 
     const simLabs = ["1782184909611", "1782186928370", "1782197552474", "1782199846377"];
-    const finishedSimCount = simLabs.filter(mId => profile.interactiveScores?.[mId]?.["simulationLab"] >= 80).length;
+    const finishedSimCount = simLabs.filter(mId => (profile?.interactiveScores?.[mId]?.["simulationLab"] ?? 0) >= 80).length;
     const isSimMaster = finishedSimCount === 4;
 
-    let badgesList: any[] = [];
+    const subnettingComp = COMPETENCIES_CONFIG.find(c => c.name === "Subnetting & IPv4 Addressing");
+    const vlanComp = COMPETENCIES_CONFIG.find(c => c.name === "Ethernet & Switching (VLANs)");
+    const routingComp = COMPETENCIES_CONFIG.find(c => c.name === "Routing Protocols & Static Routing");
+
+    const subnettingScore = subnettingComp ? calculateCompetencyScore(subnettingComp, profile, mods as any) : 0;
+    const vlanScore = vlanComp ? calculateCompetencyScore(vlanComp, profile, mods as any) : 0;
+    const routingScore = routingComp ? calculateCompetencyScore(routingComp, profile, mods as any) : 0;
+
+    let badgesList: BadgeConfig[] = [];
     try {
       const bRes = await fetch("/api/badges");
       const bData = await bRes.json();
@@ -111,6 +198,12 @@ export default function StudentDashboard() {
         meetsCriteria = true;
       } else if (badge.id === "badge-default-top-1" && overallProgress >= 95) {
         meetsCriteria = true;
+      } else if (badge.id === "badge-default-subnetting-expert" && subnettingScore >= 80) {
+        meetsCriteria = true;
+      } else if (badge.id === "badge-default-vlan-expert" && vlanScore >= 80) {
+        meetsCriteria = true;
+      } else if (badge.id === "badge-default-routing-expert" && routingScore >= 80) {
+        meetsCriteria = true;
       }
 
       if (meetsCriteria) {
@@ -129,30 +222,32 @@ export default function StudentDashboard() {
       const uRes = await fetch("/api/users");
       const uData = await uRes.json();
       if (uData.success) {
-        const profile = uData.users.find((u: any) => u.email.toLowerCase() === email.toLowerCase());
+        const profile = uData.users.find((u: UserProfile) => u.email.toLowerCase() === email.toLowerCase());
         if (profile) {
           const currentEarned = profile.earnedBadges || [];
           const newEarnedBadge = {
             badgeId: unlockedBadge.id,
             awardedAt: new Date().toISOString(),
-            awardedBy: "Automatic Achievement Engine"
+            awardedBy: "System Auto-Grader"
           };
-
+          
           const updatedEarned = [...currentEarned, newEarnedBadge];
-          const updateRes = await fetch("/api/users", {
+          
+          await fetch("/api/users", {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               email,
-              earnedBadges: updatedEarned
+              updates: {
+                earnedBadges: updatedEarned
+              }
             })
           });
-
-          const updateData = await updateRes.json();
-          if (updateData.success) {
-            setUnlockedBadge(null);
-            window.location.reload();
-          }
+          
+          alert(`Congratulations! You earned the "${unlockedBadge.name}" Badge!`);
+          setUnlockedBadge(null);
+          // Refresh page details
+          window.location.reload();
         }
       }
     } catch (e) {
@@ -162,50 +257,55 @@ export default function StudentDashboard() {
 
   useEffect(() => {
     if (userProfile && modules.length > 0 && Object.keys(completedTopics).length > 0) {
-      checkBadgeEligibility(userProfile, modules, completedTopics, completedPretests);
+      Promise.resolve().then(() => {
+        checkBadgeEligibility(userProfile, modules, completedTopics, completedPretests);
+      });
     }
   }, [completedTopics, completedPretests, userProfile, modules]);
 
   useEffect(() => {
     const savedName = localStorage.getItem("userName");
-    if (savedName) {
-      setUserName(savedName.split(" ")[0]);
-    }
-
     const email = localStorage.getItem("userEmail") || "";
     const savedNameFull = localStorage.getItem("userName") || "Student";
-    const storedCompleted = localStorage.getItem(`completed_topics_${savedNameFull}`);
-    if (storedCompleted) {
-      try {
-        setCompletedTopics(JSON.parse(storedCompleted));
-      } catch (e) {
-        console.error(e);
+
+    Promise.resolve().then(() => {
+      if (savedName) {
+        setUserName(savedName.split(" ")[0]);
       }
-    }
-    const storedWatched = localStorage.getItem(`watched_videos_${savedNameFull}`);
-    if (storedWatched) {
-      try {
-        setWatchedVideos(JSON.parse(storedWatched));
-      } catch (e) {
-        console.error(e);
+
+      const storedCompleted = localStorage.getItem(`completed_topics_${savedNameFull}`);
+      if (storedCompleted) {
+        try {
+          setCompletedTopics(JSON.parse(storedCompleted));
+        } catch (e) {
+          console.error(e);
+        }
       }
-    }
-    const storedPretests = localStorage.getItem(`completed_pretests_${savedNameFull}`);
-    if (storedPretests) {
-      try {
-        setCompletedPretests(JSON.parse(storedPretests));
-      } catch (e) {
-        console.error(e);
+      const storedWatched = localStorage.getItem(`watched_videos_${savedNameFull}`);
+      if (storedWatched) {
+        try {
+          setWatchedVideos(JSON.parse(storedWatched));
+        } catch (e) {
+          console.error(e);
+        }
       }
-    }
-    const storedScores = localStorage.getItem(`pretest_scores_${savedNameFull}`);
-    if (storedScores) {
-      try {
-        setPretestScores(JSON.parse(storedScores));
-      } catch (e) {
-        console.error(e);
+      const storedPretests = localStorage.getItem(`completed_pretests_${savedNameFull}`);
+      if (storedPretests) {
+        try {
+          setCompletedPretests(JSON.parse(storedPretests));
+        } catch (e) {
+          console.error(e);
+        }
       }
-    }
+      const storedScores = localStorage.getItem(`pretest_scores_${savedNameFull}`);
+      if (storedScores) {
+        try {
+          setPretestScores(JSON.parse(storedScores));
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    });
 
     const fetchData = async () => {
       try {
@@ -214,7 +314,7 @@ export default function StudentDashboard() {
         const usersData = await usersRes.json();
         if (usersData.success && usersData.users) {
           const profile = usersData.users.find(
-            (u: any) => u.email.toLowerCase() === email.toLowerCase()
+            (u: UserProfile) => u.email.toLowerCase() === email.toLowerCase()
           );
           if (profile) {
             setUserProfile(profile);
@@ -265,68 +365,6 @@ export default function StudentDashboard() {
 
     fetchData();
   }, []);
-
-  const getModuleIndex = (moduleId: number): number => {
-    const ids = [
-      1782134355228, // Introduction to Networking
-      1782182808093, // Communicating Over The InternetPart 1
-      1782181968596, // Communicating Over The Internet Part 2
-      1782184909611, // Addressing IPv4
-      1782185665993, // Ethernet Part 1
-      1782186311891, // Ethernet Part 2
-      1782186928370, // Network Configuration
-      1782197552474, // Basic Router Configuration
-      1782198533015, // Routing Protocol Concepts
-      1782199846377, // Static Routing Part 1
-      1782200580841, // Static Routing Part 2
-      1782203599448  // Advance Static Routing
-    ];
-    const idx = ids.indexOf(moduleId);
-    return idx !== -1 ? idx : 0;
-  };
-
-  const ensureInteractiveActivity = (mods: Module[]): Module[] => {
-    if (mods.length === 0) return mods;
-    return mods.map((mod) => {
-      const idx = getModuleIndex(mod.id);
-      let newTopics = mod.topics.filter(t => 
-        (t.id < 88888800 || t.id > 99999999) &&
-        t.title !== "Module Discussion Forum" &&
-        t.title !== "Interactive Subnetting Activity" &&
-        t.title !== "Interactive Activity"
-      );
-      newTopics.push({
-        id: 88888800 + idx,
-        title: "Module Discussion Forum",
-        materials: [
-          {
-            id: 88888810 + idx,
-            type: "text",
-            title: "Module Discussion",
-            content: "discussion-forum-placeholder"
-          }
-        ],
-        subtopics: []
-      });
-      newTopics.push({
-        id: 99999900 + idx,
-        title: "Interactive Activity",
-        materials: [
-          {
-            id: 99999910 + idx,
-            type: "text",
-            title: "Hands-on Exercises",
-            content: "interactive-activity-placeholder"
-          }
-        ],
-        subtopics: []
-      });
-      return {
-        ...mod,
-        topics: newTopics
-      };
-    });
-  };
 
   const isTopicUnlocked = (mod: Module, topicIdx: number): boolean => {
     if (mod.pretest && mod.pretest.length > 0) {
@@ -431,6 +469,9 @@ export default function StudentDashboard() {
     return "Legendary streak! You're a true scholar.";
   };
 
+  // Get gamified level details
+  const { level, currentLevelXp, xpNeededForNextLevel, progressPercentage } = getLevelInfo(userProfile?.xp || 0);
+
   // Get last 7 days for heatmap
   const getLast7Days = () => {
     const days = [];
@@ -489,7 +530,7 @@ export default function StudentDashboard() {
                   {userProfile.rejectMessage && (
                     <div className="bg-red-500/5 border border-red-500/20 rounded-xl p-4 mt-2">
                       <div className="text-[10px] font-bold text-red-400 uppercase tracking-wider mb-1">Feedback from Professor:</div>
-                      <p className="text-xs text-brand-text font-medium leading-relaxed italic">"{userProfile.rejectMessage}"</p>
+                      <p className="text-xs text-brand-text font-medium leading-relaxed italic">&quot;{userProfile.rejectMessage}&quot;</p>
                     </div>
                   )}
                   <p className="text-xs text-brand-muted mt-2 leading-relaxed">
@@ -646,6 +687,64 @@ export default function StudentDashboard() {
             {/* RIGHT COLUMN: Overall Progress & Actions */}
             <div className="flex flex-col gap-8">
 
+              {/* Level & XP Mastery Card */}
+              <div className="bg-brand-card border border-brand-border rounded-2xl p-6 shadow-lg relative overflow-hidden bg-gradient-to-br from-brand-card to-brand-border/10">
+                {/* Decorative glowing backplate */}
+                <div className="absolute top-0 right-0 w-32 h-32 bg-brand-cyan/5 rounded-full blur-3xl pointer-events-none" />
+                
+                <h2 className="text-xs font-bold uppercase tracking-wider text-brand-cyan mb-4 border-b border-brand-border/40 pb-2 flex justify-between items-center">
+                  <span>Student Mastery Level</span>
+                  <span className="text-[10px] bg-brand-cyan/10 text-brand-cyan px-2 py-0.5 rounded-full font-mono whitespace-nowrap">
+                    {userProfile?.xp || 0} XP Total
+                  </span>
+                </h2>
+
+                <div className="flex items-center gap-5 mb-5">
+                  {/* Huge Circular Badge */}
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-cyan to-indigo-600 flex flex-col items-center justify-center shadow-lg shadow-brand-cyan/20 border border-brand-cyan/30 text-white shrink-0">
+                    <span className="text-[9px] uppercase tracking-wider font-extrabold opacity-75">LVL</span>
+                    <span className="text-2xl font-black leading-none">{level}</span>
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between items-baseline mb-1.5">
+                      <span className="text-sm font-extrabold text-brand-text">Level Progress</span>
+                      <span className="text-[10px] font-mono font-bold text-brand-muted">
+                        {currentLevelXp} / {xpNeededForNextLevel} XP
+                      </span>
+                    </div>
+
+                    {/* Styled progress bar */}
+                    <div className="w-full h-2.5 bg-brand-bg rounded-full overflow-hidden border border-brand-border/30 p-0.5">
+                      <div 
+                        className="h-full bg-gradient-to-r from-brand-cyan to-indigo-500 rounded-full transition-all duration-500 ease-out shadow-[0_0_8px_rgba(0,188,212,0.4)]"
+                        style={{ width: `${progressPercentage}%` }}
+                      />
+                    </div>
+                    
+                    <p className="text-[10px] text-brand-muted mt-2">
+                      Earn <span className="font-bold text-brand-cyan">{xpNeededForNextLevel - currentLevelXp} XP</span> more to reach Level {level + 1}!
+                    </p>
+                  </div>
+                </div>
+
+                {/* Quick breakdown of XP sources */}
+                <div className="grid grid-cols-2 gap-2 text-[10px] bg-brand-bg/40 border border-brand-border/30 rounded-xl p-3">
+                  <div className="flex items-center gap-1.5 text-brand-muted">
+                    <span className="text-brand-cyan">✓</span> Pretests: <span className="font-bold text-brand-text">+{Object.keys(userProfile?.pretestScores || {}).length * 100}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-brand-muted">
+                    <span className="text-brand-cyan">✓</span> Labs: <span className="font-bold text-brand-text">+{Object.keys(userProfile?.labSubmissions || {}).length * 200}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-brand-muted">
+                    <span className="text-brand-cyan">✓</span> Exercises: <span className="font-bold text-brand-text">+{Object.keys(userProfile?.completedTopics || {}).filter(k => k.startsWith("999999")).length * 150}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-brand-muted">
+                    <span className="text-brand-cyan">✓</span> Modules: <span className="font-bold text-brand-text">+{MODULE_TOPICS_MAP.filter(m => m.topics.every(tid => userProfile?.completedTopics?.[String(tid)] === true || userProfile?.completedTopics?.[Number(tid)] === true)).length * 300}</span>
+                  </div>
+                </div>
+              </div>
+
               {/* Fire Streak Card */}
               <div className={`bg-brand-card border rounded-2xl p-6 shadow-lg ${currentStreak > 0 ? 'border-orange-500/30 streak-card-glow' : 'border-brand-border'}`}>
                 <h2 className="text-xs font-bold uppercase tracking-wider text-brand-cyan mb-4 border-b border-brand-border/40 pb-2">
@@ -743,6 +842,34 @@ export default function StudentDashboard() {
                   Go to Curriculum
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
                 </Link>
+              </div>
+
+              {/* Competencies Mastery Card */}
+              <div className="bg-brand-card border border-brand-border rounded-2xl p-6 shadow-lg flex flex-col gap-4 text-left">
+                <h2 className="text-xs font-bold uppercase tracking-wider text-brand-cyan mb-2 border-b border-brand-border/40 pb-2">
+                  Competency Mastery
+                </h2>
+                <div className="flex flex-col gap-4">
+                  {COMPETENCIES_CONFIG.map((comp) => {
+                    const score = userProfile ? calculateCompetencyScore(comp, userProfile, modules as any) : 0;
+                    return (
+                      <div key={comp.name} className="flex flex-col gap-1.5 text-xs">
+                        <div className="flex justify-between items-center font-semibold">
+                          <span className="truncate max-w-[170px]" title={comp.name}>
+                            {comp.icon} {comp.name}
+                          </span>
+                          <span className="font-mono text-brand-cyan font-bold">{score}%</span>
+                        </div>
+                        <div className="w-full h-2 bg-brand-bg rounded-full overflow-hidden border border-brand-border/20">
+                          <div 
+                            className="h-full bg-brand-cyan transition-all duration-500"
+                            style={{ width: `${score}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Quick Navigation Card */}

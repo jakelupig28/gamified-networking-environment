@@ -55,32 +55,12 @@ export default function StudentLeaderboard() {
             (u: any) => u.role === "Student" && u.status === "admitted"
           );
 
-          // Calculate score for each student
+          // Map each student's Mastery XP
           const ranked: StudentRank[] = admittedStudents.map((s: any) => {
-            let totalScore = 0;
-
-            // Sum pre-test scores
-            if (s.pretestScores) {
-              Object.values(s.pretestScores).forEach((val: any) => {
-                totalScore += Number(val) || 0;
-              });
-            }
-
-            // Sum interactive activity scores
-            if (s.interactiveScores) {
-              Object.values(s.interactiveScores).forEach((moduleScores: any) => {
-                if (moduleScores) {
-                  Object.values(moduleScores).forEach((taskScore: any) => {
-                    totalScore += Number(taskScore) || 0;
-                  });
-                }
-              });
-            }
-
             return {
               name: s.name,
               email: s.email,
-              score: totalScore,
+              score: s.xp || 0,
               studentId: s.studentId,
               course: s.course
             };
@@ -140,7 +120,7 @@ export default function StudentLeaderboard() {
                   <TrophyIcon className="w-10 h-10 text-slate-300 drop-shadow-[0_2px_8px_rgba(148,163,184,0.35)] mb-1" />
                   <div className="text-xs font-mono text-slate-400 font-bold uppercase tracking-wider">Rank 2</div>
                   <div className="font-extrabold text-brand-text truncate max-w-full text-sm mt-1">{leaderboard[1].name}</div>
-                  <div className="text-brand-cyan font-bold text-xs mt-1 font-mono">{leaderboard[1].score} pts</div>
+                  <div className="text-brand-cyan font-bold text-xs mt-1 font-mono">{leaderboard[1].score} XP</div>
                 </div>
               )}
 
@@ -151,7 +131,7 @@ export default function StudentLeaderboard() {
                   <TrophyIcon className="w-12 h-12 text-yellow-400 drop-shadow-[0_2px_12px_rgba(234,179,8,0.45)] mb-1.5 animate-bounce-subtle" />
                   <div className="text-xs font-mono text-yellow-400 font-bold uppercase tracking-wider">Rank 1</div>
                   <div className="font-black text-brand-text truncate max-w-full text-base mt-1">{leaderboard[0].name}</div>
-                  <div className="text-brand-cyan font-black text-sm mt-1 font-mono">{leaderboard[0].score} pts</div>
+                  <div className="text-brand-cyan font-black text-sm mt-1 font-mono">{leaderboard[0].score} XP</div>
                 </div>
               )}
 
@@ -162,7 +142,7 @@ export default function StudentLeaderboard() {
                   <TrophyIcon className="w-8 h-8 text-amber-600 drop-shadow-[0_2px_6px_rgba(217,119,6,0.35)] mb-1" />
                   <div className="text-xs font-mono text-amber-500 font-bold uppercase tracking-wider">Rank 3</div>
                   <div className="font-extrabold text-brand-text truncate max-w-full text-xs mt-1">{leaderboard[2].name}</div>
-                  <div className="text-brand-cyan font-bold text-xs mt-1 font-mono">{leaderboard[2].score} pts</div>
+                  <div className="text-brand-cyan font-bold text-xs mt-1 font-mono">{leaderboard[2].score} XP</div>
                 </div>
               )}
             </div>
@@ -176,7 +156,7 @@ export default function StudentLeaderboard() {
                       <th className="py-3 px-4 w-20">Rank</th>
                       <th className="py-3 px-4">Student Name</th>
                       <th className="py-3 px-4">Course / Details</th>
-                      <th className="py-3 px-4 text-right">Total Score</th>
+                      <th className="py-3 px-4 text-right">Total XP</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-brand-border/20">
@@ -202,7 +182,7 @@ export default function StudentLeaderboard() {
                             {student.studentId && <span className="text-[10px] font-mono ml-2">({student.studentId})</span>}
                           </td>
                           <td className="py-4 px-4 text-right font-mono font-bold text-sm text-brand-text">
-                            {student.score} <span className="text-[10px] text-brand-muted font-normal">pts</span>
+                            {student.score} <span className="text-[10px] text-brand-muted font-normal">XP</span>
                           </td>
                         </tr>
                       );

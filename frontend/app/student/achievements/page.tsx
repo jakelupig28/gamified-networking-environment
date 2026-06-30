@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Sidebar from "@/components/Sidebar";
+import { COMPETENCIES_CONFIG, calculateCompetencyScore, Module, StudentProfile } from "@/utils/competencies";
 
 type Badge = {
   id: string;
@@ -25,31 +26,44 @@ export default function StudentAchievementsPage() {
   const [userName, setUserName] = useState("Student");
   const [selectedBadge, setSelectedBadge] = useState<Badge | null>(null);
   const [previewImage, setPreviewImage] = useState<{ src: string; name: string } | null>(null);
+  const [modules, setModules] = useState<Module[]>([]);
+  const [studentProfile, setStudentProfile] = useState<StudentProfile | null>(null);
+  const [showCertificate, setShowCertificate] = useState(false);
 
   useEffect(() => {
     const savedName = localStorage.getItem("userName");
-    if (savedName) setUserName(savedName.split(" ")[0]);
+    if (savedName) {
+      Promise.resolve().then(() => {
+        setUserName(savedName.split(" ")[0]);
+      });
+    }
 
     const fetchData = async () => {
       try {
         const email = localStorage.getItem("userEmail") || "";
 
-        const [badgesRes, usersRes] = await Promise.all([
+        const [badgesRes, usersRes, modulesRes] = await Promise.all([
           fetch("/api/badges"),
           fetch("/api/users"),
+          fetch("/api/modules")
         ]);
 
         const badgesData = await badgesRes.json();
         const usersData = await usersRes.json();
+        const modulesData = await modulesRes.json();
 
         if (badgesData.success) setBadges(badgesData.badges);
+        if (modulesData.success) setModules(modulesData.modules || []);
 
         if (usersData.success && usersData.users) {
           const currentUser = usersData.users.find(
-            (u: any) => u.email.toLowerCase() === email.toLowerCase()
+            (u: StudentProfile) => u.email.toLowerCase() === email.toLowerCase()
           );
-          if (currentUser?.earnedBadges) {
-            setEarnedBadges(currentUser.earnedBadges);
+          if (currentUser) {
+            setStudentProfile(currentUser);
+            if (currentUser.earnedBadges) {
+              setEarnedBadges(currentUser.earnedBadges);
+            }
           }
         }
       } catch (e) {
@@ -72,12 +86,67 @@ export default function StudentAchievementsPage() {
   const totalCount = badges.length;
   const progressPercent = totalCount > 0 ? Math.round((earnedCount / totalCount) * 100) : 0;
 
-  return (
-    <div className="min-h-screen bg-brand-bg pl-64 flex flex-col">
-      <Sidebar activePath="/student/achievements" />
+  // Hashing helper for unique, letters+numbers certificate ID
+  const generateCertificateId = (email: string) => {
+    if (!email) return "NM-2026-0000";
+    let hash = 0;
+    for (let i = 0; i < email.length; i++) {
+      hash = email.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const hex = Math.abs(hash).toString(16).toUpperCase().padStart(8, "0");
+    return `NM-2026-${hex.substring(0, 4)}-${hex.substring(4, 8)}`;
+  };
 
-      <main className="p-10 flex-grow w-full max-w-6xl mx-auto text-brand-text">
-        <header className="mb-10">
+  // Certificate eligibility criteria calculations
+  const totalModulesCount = modules.length;
+  const completedModulesCount = modules.filter((mod) =>
+    mod.topics.every((t) => studentProfile?.completedTopics?.[t.id] === true)
+  ).length;
+  const isAllTopicsCompleted = totalModulesCount > 0 && completedModulesCount === totalModulesCount;
+
+  const pretestModules = modules.filter((mod) => mod.pretest && mod.pretest.length > 0);
+  const totalPretestsCount = pretestModules.length;
+  const completedPretestsCount = pretestModules.filter((mod) =>
+    studentProfile?.pretestScores?.[mod.id] !== undefined
+  ).length;
+  const isAllPretestsCompleted = totalPretestsCount > 0 && completedPretestsCount === totalPretestsCount;
+
+  const simLabModuleIds = [1782184909611, 1782186928370, 1782197552474, 1782199846377];
+  const totalSimLabsCount = simLabModuleIds.length;
+  const completedSimLabsCount = simLabModuleIds.filter((mId) => {
+    const score = studentProfile?.interactiveScores?.[mId]?.["simulationLab"];
+    return score !== undefined && score >= 80;
+  }).length;
+  const isAllSimLabsCompleted = completedSimLabsCount === totalSimLabsCount;
+
+  const packetTracerIds = ["pt-lab-1", "pt-lab-2", "pt-lab-3", "pt-lab-4"];
+  const totalPTLabsCount = packetTracerIds.length;
+  const completedPTLabsCount = packetTracerIds.filter((labId) =>
+    studentProfile?.labSubmissions?.[labId] !== undefined
+  ).length;
+  const isAllPTLabsCompleted = completedPTLabsCount === totalPTLabsCount;
+
+  const totalQuizzesCount = modules.length;
+  const completedQuizzesCount = modules.filter((mod) =>
+    studentProfile?.quizScores?.[mod.id] !== undefined
+  ).length;
+  const isAllQuizzesCompleted = totalQuizzesCount > 0 && completedQuizzesCount === totalQuizzesCount;
+
+  const isCertificateEligible =
+    isAllTopicsCompleted &&
+    isAllPretestsCompleted &&
+    isAllSimLabsCompleted &&
+    isAllPTLabsCompleted &&
+    isAllQuizzesCompleted;
+
+  return (
+    <div className="min-h-screen bg-brand-bg pl-64 flex flex-col print:pl-0 print:bg-white text-brand-text print:text-black">
+      <div className="print:hidden">
+        <Sidebar activePath="/student/achievements" />
+      </div>
+
+      <main className="p-10 flex-grow w-full max-w-6xl mx-auto text-brand-text print:p-0">
+        <header className="mb-10 print:hidden">
           <div className="text-[10px] font-bold uppercase tracking-widest text-brand-cyan mb-2">
             Student Achievements
           </div>
@@ -93,12 +162,89 @@ export default function StudentAchievementsPage() {
           </p>
         </header>
 
+        {/* Certificate Completion Status Card */}
+        {!isLoading && (
+          <div className="mb-8 print:hidden">
+            {isCertificateEligible ? (
+              <div className="bg-gradient-to-r from-yellow-500/10 via-brand-card-light to-brand-card border border-yellow-500/40 rounded-2xl p-6 md:p-8 flex flex-col md:flex-row items-center justify-between gap-6 shadow-[0_0_20px_rgba(234,179,8,0.08)]">
+                <div className="flex items-center gap-5">
+                  <div className="w-16 h-16 rounded-2xl bg-yellow-500/10 border border-yellow-500/30 flex items-center justify-center text-3xl shadow-inner shrink-0">
+                    🏆
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-extrabold text-brand-text">
+                      Official Certificate of Completion Earned!
+                    </h2>
+                    <p className="text-brand-muted text-xs mt-1 max-w-xl leading-relaxed">
+                      Outstanding work! You have completed all 12 modules, pre-tests, simulation sandboxes, lab uploads, and quizzes. You are now officially certified in Advanced Computer Networking.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowCertificate(true)}
+                  className="px-6 py-3 rounded-xl bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-400 hover:to-amber-500 text-brand-bg font-extrabold text-xs uppercase tracking-wider shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer shrink-0"
+                >
+                  View & Print Certificate
+                </button>
+              </div>
+            ) : (
+              <div className="bg-brand-card border border-brand-border rounded-2xl p-6 md:p-8 flex flex-col lg:flex-row justify-between gap-8 shadow-lg">
+                <div className="space-y-3 max-w-lg">
+                  <div className="flex items-center gap-3">
+                    <span className="w-8 h-8 rounded-lg bg-brand-bg border border-brand-border flex items-center justify-center text-sm shadow-inner shrink-0">
+                      🔒
+                    </span>
+                    <h2 className="text-sm font-extrabold text-brand-text">
+                      Certificate of Completion
+                    </h2>
+                  </div>
+                  <p className="text-brand-muted text-xs leading-relaxed">
+                    Complete all curriculum components to unlock your official Certificate of Completion. Track your progress below to see what remains.
+                  </p>
+                </div>
+                <div className="flex-1 max-w-md w-full grid grid-cols-2 sm:grid-cols-3 gap-3 self-center">
+                  <div className="bg-brand-bg/40 border border-brand-border/40 rounded-xl p-3 flex flex-col items-center justify-center text-center">
+                    <span className="text-[10px] text-brand-muted font-mono uppercase tracking-wider">Modules</span>
+                    <span className={`text-base font-extrabold mt-1 ${isAllTopicsCompleted ? "text-green-400" : "text-brand-cyan"}`}>
+                      {completedModulesCount}/{totalModulesCount}
+                    </span>
+                  </div>
+                  <div className="bg-brand-bg/40 border border-brand-border/40 rounded-xl p-3 flex flex-col items-center justify-center text-center">
+                    <span className="text-[10px] text-brand-muted font-mono uppercase tracking-wider">Pre-tests</span>
+                    <span className={`text-base font-extrabold mt-1 ${isAllPretestsCompleted ? "text-green-400" : "text-brand-cyan"}`}>
+                      {completedPretestsCount}/{totalPretestsCount}
+                    </span>
+                  </div>
+                  <div className="bg-brand-bg/40 border border-brand-border/40 rounded-xl p-3 flex flex-col items-center justify-center text-center">
+                    <span className="text-[10px] text-brand-muted font-mono uppercase tracking-wider">Sim Labs</span>
+                    <span className={`text-base font-extrabold mt-1 ${isAllSimLabsCompleted ? "text-green-400" : "text-brand-cyan"}`}>
+                      {completedSimLabsCount}/{totalSimLabsCount}
+                    </span>
+                  </div>
+                  <div className="bg-brand-bg/40 border border-brand-border/40 rounded-xl p-3 flex flex-col items-center justify-center text-center">
+                    <span className="text-[10px] text-brand-muted font-mono uppercase tracking-wider">PT Labs</span>
+                    <span className={`text-base font-extrabold mt-1 ${isAllPTLabsCompleted ? "text-green-400" : "text-brand-cyan"}`}>
+                      {completedPTLabsCount}/{totalPTLabsCount}
+                    </span>
+                  </div>
+                  <div className="bg-brand-bg/40 border border-brand-border/40 rounded-xl p-3 flex flex-col items-center justify-center text-center col-span-2 sm:col-span-1">
+                    <span className="text-[10px] text-brand-muted font-mono uppercase tracking-wider">Quizzes</span>
+                    <span className={`text-base font-extrabold mt-1 ${isAllQuizzesCompleted ? "text-green-400" : "text-brand-cyan"}`}>
+                      {completedQuizzesCount}/{totalQuizzesCount}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {isLoading ? (
-          <div className="flex justify-center items-center py-20">
+          <div className="flex justify-center items-center py-20 print:hidden">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-cyan"></div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 print:hidden">
             {/* LEFT COLUMN: Badge Collection */}
             <div className="lg:col-span-2 flex flex-col gap-8">
               {/* Earned Badges */}
@@ -318,6 +464,34 @@ export default function StudentAchievementsPage() {
                 </div>
               </div>
 
+              {/* Competency Progress Tracker */}
+              <div className="bg-brand-card border border-brand-border rounded-2xl p-6 shadow-lg flex flex-col gap-4 text-left">
+                <h2 className="text-xs font-bold uppercase tracking-wider text-brand-cyan border-b border-brand-border/40 pb-2">
+                  Competency Mastery
+                </h2>
+                <div className="flex flex-col gap-4">
+                  {COMPETENCIES_CONFIG.map((comp) => {
+                    const score = studentProfile ? calculateCompetencyScore(comp, studentProfile, modules) : 0;
+                    return (
+                      <div key={comp.name} className="flex flex-col gap-1.5 text-xs">
+                        <div className="flex justify-between items-center font-semibold">
+                          <span className="truncate max-w-[170px]" title={comp.name}>
+                            {comp.icon} {comp.name}
+                          </span>
+                          <span className="font-mono text-brand-cyan font-bold">{score}%</span>
+                        </div>
+                        <div className="w-full h-2 bg-brand-bg rounded-full overflow-hidden border border-brand-border/20">
+                          <div 
+                            className="h-full bg-brand-cyan transition-all duration-500"
+                            style={{ width: `${score}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Stats Card */}
               <div className="bg-brand-card border border-brand-border rounded-2xl p-6 shadow-lg">
                 <h2 className="text-xs font-bold uppercase tracking-wider text-brand-cyan mb-4 border-b border-brand-border/40 pb-2">
@@ -486,6 +660,134 @@ export default function StudentAchievementsPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+      {/* ===== CERTIFICATE MODAL ===== */}
+      {showCertificate && studentProfile && (
+        <div id="certificate-print-root" className="fixed inset-0 bg-black/85 backdrop-blur-md z-[150] flex items-center justify-center p-4 md:p-8 animate-fadeIn print:bg-white print:p-0 print:absolute print:inset-0">
+          
+          {/* Print controls - hidden in print */}
+          <div className="absolute top-4 right-4 flex items-center gap-3 print:hidden">
+            <button
+              onClick={() => window.print()}
+              className="px-4 py-2 bg-yellow-500 hover:bg-yellow-400 text-brand-bg font-extrabold text-[10px] uppercase tracking-wider rounded-lg transition-all flex items-center gap-2 cursor-pointer shadow-lg"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14" rx="1"/><path d="M6 9V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v5"/></svg>
+              Print Certificate
+            </button>
+            <button
+              onClick={() => setShowCertificate(false)}
+                            className="p-2.5 bg-brand-border/60 hover:bg-brand-border rounded-lg text-brand-text transition-all border border-brand-border cursor-pointer shadow-lg"
+              title="Close"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+
+          {/* Certificate Frame */}
+          <div 
+            id="certificate-print-frame" 
+            className="w-full max-w-4xl aspect-[1.414/1] relative overflow-hidden shadow-2xl print:border-none print:bg-white print:text-slate-900 print:shadow-none print:w-full print:h-full print:rounded-none"
+            style={{ 
+              backgroundImage: "url('/certificate_template.png')", 
+              backgroundSize: "100% 100%", 
+              backgroundRepeat: "no-repeat" 
+            }}
+          >
+            {/* 1. Recipient name overlay covering the placeholder box */}
+            <div className="absolute top-[30.2%] left-[18.2%] w-[63.6%] h-[7.3%] bg-[#EDEAE6] flex items-center justify-center font-serif text-sm sm:text-base md:text-xl font-bold text-[#1e293b]">
+              {studentProfile.name}
+            </div>
+            {/* Cover recipient helper text under the name box */}
+            <div className="absolute top-[37.5%] left-[30%] w-[40%] h-[3.5%] bg-[#FAF8F5]"></div>
+
+            {/* 2. Course name overlay covering the program placeholder box */}
+            <div className="absolute top-[47.6%] left-[18.2%] w-[63.6%] h-[4.9%] bg-[#EDEAE6] flex items-center justify-center font-sans text-[10px] sm:text-xs md:text-sm font-bold uppercase tracking-wider text-[#1e293b]">
+              Advanced Computer Networking Curriculum
+            </div>
+            {/* Cover course helper text under the course box */}
+            <div className="absolute top-[52.5%] left-[30%] w-[40%] h-[3.5%] bg-[#FAF8F5]"></div>
+
+            {/* 3. Date overlay covering the date placeholder box */}
+            <div className="absolute top-[60.6%] left-[33.7%] w-[32.6%] h-[4.9%] bg-[#EDEAE6] flex items-center justify-center font-sans text-[9px] sm:text-xs font-bold text-[#1e293b]">
+              {new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
+            </div>
+            {/* Cover date helper text under the date box */}
+            <div className="absolute top-[65.5%] left-[40%] w-[20%] h-[3.5%] bg-[#FAF8F5]"></div>
+
+            {/* 4. Left signature overlay (NetMaster Administration) */}
+            <div className="absolute top-[73%] left-[19%] w-[27%] h-[4.5%] bg-[#FAF8F5] flex items-center justify-center font-serif text-[10px] sm:text-xs italic font-bold text-slate-700">
+              NetMaster Academic Board
+            </div>
+            {/* Left title overlay */}
+            <div className="absolute top-[78.2%] left-[19%] w-[27%] h-[4%] bg-[#FAF8F5] flex items-center justify-center font-sans text-[8px] sm:text-[10px] font-semibold text-slate-500">
+              Authorized Certification Unit
+            </div>
+
+            {/* 5. Right signature overlay (Curriculum Lead Director) */}
+            <div className="absolute top-[73%] left-[51%] w-[27%] h-[4.5%] bg-[#FAF8F5] flex items-center justify-center font-serif text-[10px] sm:text-xs italic font-bold text-slate-700">
+              Dr. E. V. Kathará
+            </div>
+            {/* Right title overlay */}
+            <div className="absolute top-[78.2%] left-[51%] w-[27%] h-[4%] bg-[#FAF8F5] flex items-center justify-center font-sans text-[8px] sm:text-[10px] font-semibold text-slate-500">
+              Curriculum Director
+            </div>
+
+            {/* 6. Unique Certificate ID overlay on bottom right */}
+            <div className="absolute top-[85.5%] right-[5.5%] w-[18%] h-[4.5%] bg-[#FAF8F5] flex items-center justify-end font-mono text-[9px] sm:text-[11px] font-bold text-slate-800">
+              {generateCertificateId(studentProfile.email)}
+            </div>
+
+          </div>
+
+          <style dangerouslySetInnerHTML={{__html: `
+            @media print {
+              body {
+                background-color: white !important;
+                color: black !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+              }
+              /* Hide everything in body */
+              body > div:first-child {
+                display: none !important;
+              }
+              /* Show ONLY this modal container */
+              #certificate-print-root {
+                display: block !important;
+                position: fixed !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 100vw !important;
+                height: 100vh !important;
+                z-index: 99999 !important;
+                background: white !important;
+                margin: 0 !important;
+                padding: 0 !important;
+              }
+              #certificate-print-frame {
+                background-image: url('/certificate_template.png') !important;
+                background-size: 100% 100% !important;
+                background-repeat: no-repeat !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                border: none !important;
+                color: #0f172a !important;
+                box-shadow: none !important;
+                border-radius: 0 !important;
+                width: 100% !important;
+                height: 100% !important;
+                display: flex !important;
+                flex-direction: column !important;
+                justify-content: space-between !important;
+                align-items: center !important;
+                padding: 3rem !important;
+              }
+              .print\\:hidden {
+                display: none !important;
+              }
+            }
+          `}} />
         </div>
       )}
     </div>

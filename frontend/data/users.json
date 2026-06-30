@@ -18,11 +18,20 @@
     "rejectMessage": "",
     "admittedSubject": "Networking 1",
     "admittedTerm": "1st Semester AY 2026 - 2027",
-    "pretestScores": { "1781848568626": 3 },
-    "completedPretests": { "1781848568626": true },
-    "completedTopics": { "1781848568627": true },
+    "pretestScores": {
+      "1781848568626": 3
+    },
+    "completedPretests": {
+      "1781848568626": true
+    },
+    "completedTopics": {
+      "1781848568627": true
+    },
     "watchedVideos": {},
-    "interactiveScores": {}
+    "interactiveScores": {},
+    "quizScores": {
+      "1782134355228": 0
+    }
   },
   {
     "id": 1779954541790,
@@ -50,9 +59,16 @@
     "name": "Jake Lupig",
     "isFirstLogin": true,
     "rejectMessage": "",
-    "pretestScores": { "1781848568626": 5 },
-    "completedPretests": { "1781848568626": true },
-    "completedTopics": { "1781848568627": true, "1781848568628": true },
+    "pretestScores": {
+      "1781848568626": 5
+    },
+    "completedPretests": {
+      "1781848568626": true
+    },
+    "completedTopics": {
+      "1781848568627": true,
+      "1781848568628": true
+    },
     "watchedVideos": {},
     "interactiveScores": {}
   }

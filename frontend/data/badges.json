@@ -52,5 +52,32 @@
     "imagePath": "/badges/top-3-overall.png",
     "isDefault": true,
     "createdAt": "2026-01-01T00:00:00.000Z"
+  },
+  {
+    "id": "badge-default-subnetting-expert",
+    "name": "Subnetting Expert",
+    "description": "Awarded for demonstrating advanced mastery in calculating subnets, binary ANDing, and IPv4 addressing topologies.",
+    "criteria": "Achieve 80% or higher in Subnetting & IPv4 Addressing competency.",
+    "imagePath": "/badges/subnetting-expert.png",
+    "isDefault": true,
+    "createdAt": "2026-01-01T00:00:00.000Z"
+  },
+  {
+    "id": "badge-default-vlan-expert",
+    "name": "VLAN Switching Expert",
+    "description": "Awarded for exceptional configuration of virtual local area networks, access ports, trunks, and local broadcast segments.",
+    "criteria": "Achieve 80% or higher in Ethernet & Switching (VLANs) competency.",
+    "imagePath": "/badges/vlan-switching-expert.png",
+    "isDefault": true,
+    "createdAt": "2026-01-01T00:00:00.000Z"
+  },
+  {
+    "id": "badge-default-routing-expert",
+    "name": "Routing Expert",
+    "description": "Awarded for showing deep configuration mastery over static routing, backup routes, and multi-network route maps.",
+    "criteria": "Achieve 80% or higher in Routing Protocols & Static Routing competency.",
+    "imagePath": "/badges/routing-expert.png",
+    "isDefault": true,
+    "createdAt": "2026-01-01T00:00:00.000Z"
   }
 ]

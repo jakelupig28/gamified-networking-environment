@@ -399,7 +399,7 @@ export default function ProfessorAnalytics() {
 
                       return (
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          {questions.map((q, idx) => {
+                          {questions.map((q: any, idx: number) => {
                             const incorrectCount = attempts.filter(s => {
                               const mistakesList = s.pretestMistakes?.[selectedModuleId] || [];
                               return mistakesList.some((m: any) => m.question === q.question);

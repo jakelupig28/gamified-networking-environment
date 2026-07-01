@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Sidebar from "@/components/Sidebar";
+import CertificateModal from "@/components/CertificateModal";
 import { COMPETENCIES_CONFIG, calculateCompetencyScore, Module, StudentProfile } from "@/utils/competencies";
 
 type Badge = {
@@ -663,133 +664,12 @@ export default function StudentAchievementsPage() {
         </div>
       )}
       {/* ===== CERTIFICATE MODAL ===== */}
-      {showCertificate && studentProfile && (
-        <div id="certificate-print-root" className="fixed inset-0 bg-black/85 backdrop-blur-md z-[150] flex items-center justify-center p-4 md:p-8 animate-fadeIn print:bg-white print:p-0 print:absolute print:inset-0">
-          
-          {/* Print controls - hidden in print */}
-          <div className="absolute top-4 right-4 flex items-center gap-3 print:hidden">
-            <button
-              onClick={() => window.print()}
-              className="px-4 py-2 bg-yellow-500 hover:bg-yellow-400 text-brand-bg font-extrabold text-[10px] uppercase tracking-wider rounded-lg transition-all flex items-center gap-2 cursor-pointer shadow-lg"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14" rx="1"/><path d="M6 9V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v5"/></svg>
-              Print Certificate
-            </button>
-            <button
-              onClick={() => setShowCertificate(false)}
-                            className="p-2.5 bg-brand-border/60 hover:bg-brand-border rounded-lg text-brand-text transition-all border border-brand-border cursor-pointer shadow-lg"
-              title="Close"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </button>
-          </div>
-
-          {/* Certificate Frame */}
-          <div 
-            id="certificate-print-frame" 
-            className="w-full max-w-4xl aspect-[1.414/1] relative overflow-hidden shadow-2xl print:border-none print:bg-white print:text-slate-900 print:shadow-none print:w-full print:h-full print:rounded-none"
-            style={{ 
-              backgroundImage: "url('/certificate_template.png')", 
-              backgroundSize: "100% 100%", 
-              backgroundRepeat: "no-repeat" 
-            }}
-          >
-            {/* 1. Recipient name overlay covering the placeholder box */}
-            <div className="absolute top-[30.2%] left-[18.2%] w-[63.6%] h-[7.3%] bg-[#EDEAE6] flex items-center justify-center font-serif text-sm sm:text-base md:text-xl font-bold text-[#1e293b]">
-              {studentProfile.name}
-            </div>
-            {/* Cover recipient helper text under the name box */}
-            <div className="absolute top-[37.5%] left-[30%] w-[40%] h-[3.5%] bg-[#FAF8F5]"></div>
-
-            {/* 2. Course name overlay covering the program placeholder box */}
-            <div className="absolute top-[47.6%] left-[18.2%] w-[63.6%] h-[4.9%] bg-[#EDEAE6] flex items-center justify-center font-sans text-[10px] sm:text-xs md:text-sm font-bold uppercase tracking-wider text-[#1e293b]">
-              Advanced Computer Networking Curriculum
-            </div>
-            {/* Cover course helper text under the course box */}
-            <div className="absolute top-[52.5%] left-[30%] w-[40%] h-[3.5%] bg-[#FAF8F5]"></div>
-
-            {/* 3. Date overlay covering the date placeholder box */}
-            <div className="absolute top-[60.6%] left-[33.7%] w-[32.6%] h-[4.9%] bg-[#EDEAE6] flex items-center justify-center font-sans text-[9px] sm:text-xs font-bold text-[#1e293b]">
-              {new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
-            </div>
-            {/* Cover date helper text under the date box */}
-            <div className="absolute top-[65.5%] left-[40%] w-[20%] h-[3.5%] bg-[#FAF8F5]"></div>
-
-            {/* 4. Left signature overlay (NetMaster Administration) */}
-            <div className="absolute top-[73%] left-[19%] w-[27%] h-[4.5%] bg-[#FAF8F5] flex items-center justify-center font-serif text-[10px] sm:text-xs italic font-bold text-slate-700">
-              NetMaster Academic Board
-            </div>
-            {/* Left title overlay */}
-            <div className="absolute top-[78.2%] left-[19%] w-[27%] h-[4%] bg-[#FAF8F5] flex items-center justify-center font-sans text-[8px] sm:text-[10px] font-semibold text-slate-500">
-              Authorized Certification Unit
-            </div>
-
-            {/* 5. Right signature overlay (Curriculum Lead Director) */}
-            <div className="absolute top-[73%] left-[51%] w-[27%] h-[4.5%] bg-[#FAF8F5] flex items-center justify-center font-serif text-[10px] sm:text-xs italic font-bold text-slate-700">
-              Dr. E. V. Kathará
-            </div>
-            {/* Right title overlay */}
-            <div className="absolute top-[78.2%] left-[51%] w-[27%] h-[4%] bg-[#FAF8F5] flex items-center justify-center font-sans text-[8px] sm:text-[10px] font-semibold text-slate-500">
-              Curriculum Director
-            </div>
-
-            {/* 6. Unique Certificate ID overlay on bottom right */}
-            <div className="absolute top-[85.5%] right-[5.5%] w-[18%] h-[4.5%] bg-[#FAF8F5] flex items-center justify-end font-mono text-[9px] sm:text-[11px] font-bold text-slate-800">
-              {generateCertificateId(studentProfile.email)}
-            </div>
-
-          </div>
-
-          <style dangerouslySetInnerHTML={{__html: `
-            @media print {
-              body {
-                background-color: white !important;
-                color: black !important;
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-              }
-              /* Hide everything in body */
-              body > div:first-child {
-                display: none !important;
-              }
-              /* Show ONLY this modal container */
-              #certificate-print-root {
-                display: block !important;
-                position: fixed !important;
-                left: 0 !important;
-                top: 0 !important;
-                width: 100vw !important;
-                height: 100vh !important;
-                z-index: 99999 !important;
-                background: white !important;
-                margin: 0 !important;
-                padding: 0 !important;
-              }
-              #certificate-print-frame {
-                background-image: url('/certificate_template.png') !important;
-                background-size: 100% 100% !important;
-                background-repeat: no-repeat !important;
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-                border: none !important;
-                color: #0f172a !important;
-                box-shadow: none !important;
-                border-radius: 0 !important;
-                width: 100% !important;
-                height: 100% !important;
-                display: flex !important;
-                flex-direction: column !important;
-                justify-content: space-between !important;
-                align-items: center !important;
-                padding: 3rem !important;
-              }
-              .print\\:hidden {
-                display: none !important;
-              }
-            }
-          `}} />
-        </div>
-      )}
+      <CertificateModal
+        isOpen={showCertificate}
+        onClose={() => setShowCertificate(false)}
+        studentName={studentProfile?.name || userName}
+        studentEmail={studentProfile?.email || ""}
+      />
     </div>
   );
 }

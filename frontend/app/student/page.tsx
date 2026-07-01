@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import Sidebar from "@/components/Sidebar";
+import CertificateModal from "@/components/CertificateModal";
 import { COMPETENCIES_CONFIG, calculateCompetencyScore, getLevelInfo, MODULE_TOPICS_MAP } from "@/utils/competencies";
 type MaterialType = "text" | "video" | "image" | "file";
 
@@ -73,6 +74,7 @@ export default function StudentDashboard() {
     imagePath?: string;
   }
   const [unlockedBadge, setUnlockedBadge] = useState<BadgeConfig | null>(null);
+  const [showCertificate, setShowCertificate] = useState(false);
 
   const getModuleIndex = (moduleId: number): number => {
     const ids = [
@@ -488,6 +490,47 @@ export default function StudentDashboard() {
 
   const last7Days = getLast7Days();
 
+  // Certificate eligibility criteria calculations
+  const completedModulesCount = modules.filter((mod) =>
+    mod.topics.every((t) => userProfile?.completedTopics?.[t.id] === true)
+  ).length;
+  const isAllTopicsCompleted = totalModulesCount > 0 && completedModulesCount === totalModulesCount;
+
+  const pretestModules = modules.filter((mod) => mod.pretest && mod.pretest.length > 0);
+  const totalPretestsCount = pretestModules.length;
+  const completedPretestsCount = pretestModules.filter((mod) =>
+    userProfile?.pretestScores?.[mod.id] !== undefined
+  ).length;
+  const isAllPretestsCompleted = totalPretestsCount > 0 && completedPretestsCount === totalPretestsCount;
+
+  const simLabModuleIds = [1782184909611, 1782186928370, 1782197552474, 1782199846377];
+  const totalSimLabsCount = simLabModuleIds.length;
+  const completedSimLabsCount = simLabModuleIds.filter((mId) => {
+    const score = userProfile?.interactiveScores?.[mId]?.["simulationLab"];
+    return score !== undefined && score >= 80;
+  }).length;
+  const isAllSimLabsCompleted = completedSimLabsCount === totalSimLabsCount;
+
+  const packetTracerIds = ["pt-lab-1", "pt-lab-2", "pt-lab-3", "pt-lab-4"];
+  const totalPTLabsCount = packetTracerIds.length;
+  const completedPTLabsCount = packetTracerIds.filter((labId) =>
+    userProfile?.labSubmissions?.[labId] !== undefined
+  ).length;
+  const isAllPTLabsCompleted = completedPTLabsCount === totalPTLabsCount;
+
+  const totalQuizzesCount = modules.length;
+  const completedQuizzesCount = modules.filter((mod) =>
+    userProfile?.quizScores?.[mod.id] !== undefined
+  ).length;
+  const isAllQuizzesCompleted = totalQuizzesCount > 0 && completedQuizzesCount === totalQuizzesCount;
+
+  const isCertificateEligible =
+    isAllTopicsCompleted &&
+    isAllPretestsCompleted &&
+    isAllSimLabsCompleted &&
+    isAllPTLabsCompleted &&
+    isAllQuizzesCompleted;
+
   return (
     <div className="min-h-screen bg-brand-bg pl-64 flex flex-col">
       <Sidebar activePath="/student/dashboard" />
@@ -595,7 +638,82 @@ export default function StudentDashboard() {
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="flex flex-col gap-8">
+            {isCertificateEligible ? (
+              <div className="bg-gradient-to-r from-yellow-500/10 via-brand-card-light to-brand-card border border-yellow-500/40 rounded-2xl p-6 md:p-8 flex flex-col md:flex-row items-center justify-between gap-6 shadow-[0_0_20px_rgba(234,179,8,0.08)] animate-scaleIn">
+                <div className="flex items-center gap-5">
+                  <div className="w-16 h-16 rounded-2xl bg-yellow-500/10 border border-yellow-500/30 flex items-center justify-center text-3xl shadow-inner shrink-0">
+                    🏆
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-extrabold text-brand-text">
+                      Official Certificate of Completion Earned!
+                    </h2>
+                    <p className="text-brand-muted text-xs mt-1 max-w-xl leading-relaxed">
+                      Outstanding work! You have completed all 12 modules, pre-tests, simulation sandboxes, lab uploads, and quizzes. You are now officially certified in Advanced Computer Networking.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowCertificate(true)}
+                  className="px-6 py-3 rounded-xl bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-400 hover:to-amber-500 text-brand-bg font-extrabold text-xs uppercase tracking-wider shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer shrink-0"
+                >
+                  View & Download Certificate
+                </button>
+              </div>
+            ) : (
+              overallProgress >= 80 && (
+                <div className="bg-brand-card border border-brand-border rounded-2xl p-6 md:p-8 flex flex-col lg:flex-row justify-between gap-8 shadow-lg animate-scaleIn">
+                  <div className="space-y-3 max-w-lg">
+                    <div className="flex items-center gap-3">
+                      <span className="w-8 h-8 rounded-lg bg-brand-bg border border-brand-border flex items-center justify-center text-sm shadow-inner shrink-0">
+                        🔒
+                      </span>
+                      <h2 className="text-sm font-extrabold text-brand-text">
+                        Certificate of Completion
+                      </h2>
+                    </div>
+                    <p className="text-brand-muted text-xs leading-relaxed">
+                      Complete all curriculum components to unlock your official Certificate of Completion. Track your progress below to see what remains.
+                    </p>
+                  </div>
+                  <div className="flex-1 max-w-md w-full grid grid-cols-2 sm:grid-cols-3 gap-3 self-center">
+                    <div className="bg-brand-bg/40 border border-brand-border/40 rounded-xl p-3 flex flex-col items-center justify-center text-center">
+                      <span className="text-[10px] text-brand-muted font-mono uppercase tracking-wider">Modules</span>
+                      <span className={`text-base font-extrabold mt-1 ${isAllTopicsCompleted ? "text-green-400" : "text-brand-cyan"}`}>
+                        {completedModulesCount}/{totalModulesCount}
+                      </span>
+                    </div>
+                    <div className="bg-brand-bg/40 border border-brand-border/40 rounded-xl p-3 flex flex-col items-center justify-center text-center">
+                      <span className="text-[10px] text-brand-muted font-mono uppercase tracking-wider">Pre-tests</span>
+                      <span className={`text-base font-extrabold mt-1 ${isAllPretestsCompleted ? "text-green-400" : "text-brand-cyan"}`}>
+                        {completedPretestsCount}/{totalPretestsCount}
+                      </span>
+                    </div>
+                    <div className="bg-brand-bg/40 border border-brand-border/40 rounded-xl p-3 flex flex-col items-center justify-center text-center">
+                      <span className="text-[10px] text-brand-muted font-mono uppercase tracking-wider">Sim Labs</span>
+                      <span className={`text-base font-extrabold mt-1 ${isAllSimLabsCompleted ? "text-green-400" : "text-brand-cyan"}`}>
+                        {completedSimLabsCount}/{totalSimLabsCount}
+                      </span>
+                    </div>
+                    <div className="bg-brand-bg/40 border border-brand-border/40 rounded-xl p-3 flex flex-col items-center justify-center text-center">
+                      <span className="text-[10px] text-brand-muted font-mono uppercase tracking-wider">PT Labs</span>
+                      <span className={`text-base font-extrabold mt-1 ${isAllPTLabsCompleted ? "text-green-400" : "text-brand-cyan"}`}>
+                        {completedPTLabsCount}/{totalPTLabsCount}
+                      </span>
+                    </div>
+                    <div className="bg-brand-bg/40 border border-brand-border/40 rounded-xl p-3 flex flex-col items-center justify-center text-center col-span-2 sm:col-span-1">
+                      <span className="text-[10px] text-brand-muted font-mono uppercase tracking-wider">Quizzes</span>
+                      <span className={`text-base font-extrabold mt-1 ${isAllQuizzesCompleted ? "text-green-400" : "text-brand-cyan"}`}>
+                        {completedQuizzesCount}/{totalQuizzesCount}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )
+            )}
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             
             {/* LEFT COLUMN: Profile and Active Modules */}
             <div className="lg:col-span-2 flex flex-col gap-8">
@@ -897,6 +1015,7 @@ export default function StudentDashboard() {
 
             </div>
 
+            </div>
           </div>
         )}
       </main>
@@ -938,6 +1057,13 @@ export default function StudentDashboard() {
           </div>
         </div>
       )}
+
+      <CertificateModal
+        isOpen={showCertificate}
+        onClose={() => setShowCertificate(false)}
+        studentName={userProfile?.name || userName}
+        studentEmail={userProfile?.email || ""}
+      />
     </div>
   );
 }
